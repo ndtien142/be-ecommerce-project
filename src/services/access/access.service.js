@@ -14,16 +14,16 @@ const { getRoleByName } = require('../../models/repo/role.repo');
 const {
     createAccount,
     getAccountByUsername,
-} = require('../../models/repo/account.repo');
+} = require('../../models/repo/user.repo');
 const {
     createKeyToken,
-    removeKeyTokenByUserCode,
+    removeKeyTokenByUserId,
 } = require('../../models/repo/keyToken.repo');
 const database = require('../../models');
 
 class AccessService {
-    static logout = async ({ userCode }) => {
-        const delKeyStore = await removeKeyTokenByUserCode(userCode);
+    static logout = async ({ userId }) => {
+        const delKeyStore = await removeKeyTokenByUserId(userId);
         return delKeyStore;
     };
     /*
@@ -33,10 +33,10 @@ class AccessService {
         4 - generate tokens
         5 - get data return login
     */
-    static login = async ({ username, password, refreshToken = null }) => {
+    static login = async ({ userLogin, password, refreshToken = null }) => {
         // 1
         const foundAccount = await database.Account.findOne({
-            where: { username },
+            where: { user_login: userLogin },
         });
         if (!foundAccount) throw new BadRequestError('Username not registered');
         // 2

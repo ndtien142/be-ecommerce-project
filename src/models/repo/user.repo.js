@@ -7,9 +7,8 @@ const createAccount = async ({
     user_email,
     user_url,
     user_registered,
-    user_status = 'normal',
+    user_status = 0,
     user_date_of_birth,
-    role_id,
 }) => {
     const result = await db.User.create({
         user_login,
@@ -20,7 +19,6 @@ const createAccount = async ({
         user_registered,
         user_status,
         user_date_of_birth,
-        role_id,
     });
     console.log(result);
     return result;
@@ -42,7 +40,6 @@ const updateAccount = async ({
     user_url,
     user_status,
     user_date_of_birth,
-    role_id,
 }) => {
     return await db.User.update(
         {
@@ -52,7 +49,6 @@ const updateAccount = async ({
             user_url,
             user_status,
             user_date_of_birth,
-            role_id,
         },
         { where: { user_login } },
     );
@@ -61,28 +57,18 @@ const updateAccount = async ({
 const deleteAccount = async (user_login) => {
     return await db.User.update(
         {
-            user_status: 'deleted',
+            user_status: 3, // 3: deleted
         },
-        {
-            where: {
-                user_login,
-                user_status: { [db.Sequelize.Op.ne]: 'deleted' },
-            },
-        },
+        { where: { user_login, user_status: { [db.Sequelize.Op.ne]: 3 } } },
     );
 };
 
 const blockAccount = async (user_login) => {
     return await db.User.update(
         {
-            user_status: 'blocked',
+            user_status: 2, // 2: blocked
         },
-        {
-            where: {
-                user_login,
-                user_status: { [db.Sequelize.Op.ne]: 'blocked' },
-            },
-        },
+        { where: { user_login, user_status: { [db.Sequelize.Op.ne]: 2 } } },
     );
 };
 

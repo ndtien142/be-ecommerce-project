@@ -17,6 +17,17 @@ function model(sequelize) {
             // unique: true,
         },
         role_description: { type: DataTypes.TEXT, allowNull: false },
+        role_status: {
+            type: DataTypes.ENUM(
+                'normal',
+                'pending',
+                'blocked',
+                'deleted',
+                'suspended',
+            ),
+            allowNull: false,
+            defaultValue: 'normal',
+        },
     };
 
     const options = {

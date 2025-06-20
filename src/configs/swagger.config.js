@@ -13,10 +13,10 @@ const options = {
         },
         components: {
             parameters: {
-                UserCodeHeader: {
-                    name: 'x-user-code',
+                UserIdHeader: {
+                    name: 'x-user-id',
                     in: 'header',
-                    description: 'User Code',
+                    description: 'User ID',
                     required: true,
                     schema: {
                         type: 'string',

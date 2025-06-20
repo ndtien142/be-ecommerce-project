@@ -2,42 +2,38 @@
 
 const { DataTypes } = require('sequelize');
 
-module.exports = model;
-
-function model(sequelize) {
+module.exports = (sequelize) => {
     const attributes = {
         id: {
             type: DataTypes.INTEGER,
-            primaryKey: true,
             autoIncrement: true,
+            primaryKey: true,
+            allowNull: false,
         },
         user_id: {
             type: DataTypes.INTEGER,
             allowNull: false,
-            unique: true,
         },
-        privateKey: {
-            type: DataTypes.TEXT,
+        status: {
+            type: DataTypes.ENUM('active', 'inactive', 'ordered'),
             allowNull: false,
+            defaultValue: 'active',
         },
-        publicKey: {
-            type: DataTypes.TEXT,
+        total_amount: {
+            type: DataTypes.DECIMAL(12, 2),
             allowNull: false,
-        },
-        refreshToken: {
-            type: DataTypes.TEXT,
-            allowNull: false,
+            defaultValue: 0.0,
         },
     };
 
     const options = {
-        tableName: 'tb_key_token',
+        tableName: 'tb_cart',
         timestamps: true,
         createdAt: 'create_time',
         updatedAt: 'update_time',
     };
 
-    const KeyToken = sequelize.define('KeyToken', attributes, options);
+    const Cart = sequelize.define('Cart', attributes, options);
 
-    return KeyToken;
-}
+    return Cart;
+};

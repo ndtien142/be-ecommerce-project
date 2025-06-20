@@ -10,37 +10,42 @@ module.exports = (sequelize) => {
             primaryKey: true,
             allowNull: false,
         },
-        phone_number: {
-            type: DataTypes.STRING(20),
-            allowNull: true,
+        name: {
+            type: DataTypes.STRING(150),
+            allowNull: false,
             unique: true,
         },
-        full_name: {
+        contact_name: {
             type: DataTypes.STRING(100),
             allowNull: true,
         },
-        avatar_url: {
+        phone: {
+            type: DataTypes.STRING(20),
+            allowNull: true,
+        },
+        email: {
+            type: DataTypes.STRING(100),
+            allowNull: true,
+        },
+        address: {
             type: DataTypes.STRING(255),
             allowNull: true,
         },
-        bio: {
-            type: DataTypes.TEXT,
-            allowNull: true,
-        },
-        gender: {
-            type: DataTypes.ENUM('male', 'female', 'other'),
-            allowNull: true,
+        status: {
+            type: DataTypes.ENUM('active', 'inactive'),
+            allowNull: false,
+            defaultValue: 'active',
         },
     };
 
     const options = {
-        tableName: 'tb_user_profile',
+        tableName: 'tb_supplier',
         timestamps: true,
         createdAt: 'create_time',
         updatedAt: 'update_time',
     };
 
-    const Profile = sequelize.define('Profile', attributes, options);
+    const Supplier = sequelize.define('Supplier', attributes, options);
 
-    return Profile;
+    return Supplier;
 };

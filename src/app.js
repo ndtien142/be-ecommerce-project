@@ -29,7 +29,7 @@ app.use(
             'Access-Control-Allow-Methods',
             'Access-Control-Request-Headers',
             'Access-Control-Request-Method',
-            'X-User-Code',
+            'X-User-Id',
             'X-Api-Key',
         ],
     }),

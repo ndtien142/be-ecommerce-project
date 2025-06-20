@@ -2,17 +2,6 @@
 
 const { DataTypes } = require('sequelize');
 
-// Notification type enum for management and reuse
-const NOTIFICATION_TYPE = {
-    BORROW_RECEIPT_NOT_ENOUGH_EQUIPMENT: 'borrow_receipt_not_enough_equipment',
-    IMPORT_RECEIPT_ERROR: 'import_receipt_error',
-    IMPORT_RECEIPT_RETURN_REQUEST: 'import_receipt_return_request',
-    LIQUIDATION_RECEIPT_APPROVED: 'liquidation_receipt_approved',
-    TRANSFER_RECEIPT_COMPLETED: 'transfer_receipt_completed',
-    GENERAL_ANNOUNCEMENT: 'general_announcement',
-    // ...add more as needed
-};
-
 module.exports = model;
 module.exports.NOTIFICATION_TYPE = NOTIFICATION_TYPE;
 
@@ -24,20 +13,23 @@ function model(sequelize) {
             autoIncrement: true,
             allowNull: false,
         },
-        user_code: {
-            type: DataTypes.STRING(20),
+        user_id: {
+            type: DataTypes.INTEGER,
             allowNull: false,
-            comment: 'Main user who triggered or is most relevant to the notification',
+            comment:
+                'Main user who triggered or is most relevant to the notification',
         },
         receivers: {
             type: DataTypes.JSON,
             allowNull: true,
-            comment: 'Array of user codes who will receive the notification (specific users or all users of a role)',
+            comment:
+                'Array of user IDs who will receive the notification (specific users or all users of a role)',
         },
         roles: {
             type: DataTypes.JSON,
             allowNull: true,
-            comment: 'Array of role codes to send notification to all users of these roles',
+            comment:
+                'Array of role IDs to send notification to all users of these roles',
         },
         title: {
             type: DataTypes.STRING(255),

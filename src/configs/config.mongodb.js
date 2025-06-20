@@ -7,7 +7,7 @@ const dev = {
     db: {
         host: process.env.DEV_DB_HOST || 'localhost',
         port: process.env.DEV_DB_PORT || 3306, // đổi thành 3306
-        name: process.env.DEV_DB_NAME || 'universityDev',
+        name: process.env.DEV_DB_NAME || 'ecommerceDev',
         user: process.env.DEV_USER_NAME || 'root',
         password: process.env.DEV_PASSWORD || 'tien1234',
         dialect: process.env.DEV_DIALECT || 'mysql',

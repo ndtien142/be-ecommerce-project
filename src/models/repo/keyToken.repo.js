@@ -49,20 +49,20 @@ const updateKeyToken = async ({
     );
 };
 
-const findKeyTokenByUserCode = async (userCode) => {
-    return await db.KeyToken.findOne({ where: { user_code: userCode } });
+const findKeyTokenByUserId = async (userId) => {
+    return await db.KeyToken.findOne({ where: { id: userId } });
 };
 
-const removeKeyTokenByUserCode = async (userCode) => {
+const removeKeyTokenByUserId = async (userId) => {
     const result = await db.KeyToken.destroy({
-        where: { user_code: userCode },
+        where: { id: userId },
     });
     return result;
 };
 
 module.exports = {
     createKeyToken,
-    findKeyTokenByUserCode,
-    removeKeyTokenByUserCode,
+    findKeyTokenByUserId,
+    removeKeyTokenByUserId,
     updateKeyToken,
 };
