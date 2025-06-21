@@ -39,6 +39,62 @@ module.exports = (sequelize) => {
             type: DataTypes.INTEGER,
             allowNull: true,
         },
+        price: {
+            type: DataTypes.DECIMAL(12, 2),
+            allowNull: false,
+            defaultValue: 0.0,
+        },
+        stock: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            defaultValue: 0,
+        },
+        min_stock: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+            defaultValue: 0,
+        },
+        weight: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+        },
+        width: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+        },
+        height: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+        },
+        length: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+        },
+        is_featured: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false,
+        },
+        is_new: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false,
+        },
+        is_sale: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false,
+        },
+        is_best_seller: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false,
+        },
+        is_hot: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false,
+        },
     };
 
     const options = {

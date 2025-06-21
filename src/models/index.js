@@ -35,14 +35,10 @@ const Permission = require('./user/permission')(sequelize);
 const Brand = require('./product/brand')(sequelize);
 const Product = require('./product/product')(sequelize);
 const ProductImage = require('./product/productImages')(sequelize);
-const SKU = require('./product/sku')(sequelize);
+const ProductMeta = require('./product/productMeta')(sequelize);
 
 // Import category model
 const Category = require('./categories/categories')(sequelize);
-
-// Import attribute models
-const Attribute = require('./attributes/attributes')(sequelize);
-const AttributeOption = require('./attributes/attributeOptions')(sequelize);
 
 // Import order and payment models
 const Order = require('./order/order')(sequelize);
@@ -79,14 +75,10 @@ database.Permission = Permission;
 database.Brand = Brand;
 database.Product = Product;
 database.ProductImage = ProductImage;
-database.SKU = SKU;
+database.ProductMeta = ProductMeta;
 
 // Category model
 database.Category = Category;
-
-// Attribute models
-database.Attribute = Attribute;
-database.AttributeOption = AttributeOption;
 
 // Order and Payment models
 database.Order = Order;
@@ -158,24 +150,24 @@ database.Product.belongsTo(database.Brand, {
     as: 'brand',
 });
 
-// Product & SKU
-database.Product.hasMany(database.SKU, {
+// Product & ProductImage
+database.Product.hasMany(database.ProductImage, {
     foreignKey: 'product_id',
-    as: 'skus',
+    as: 'images',
 });
-database.SKU.belongsTo(database.Product, {
+database.ProductImage.belongsTo(database.Product, {
     foreignKey: 'product_id',
     as: 'product',
 });
 
-// SKU & ProductImage
-database.SKU.hasMany(database.ProductImage, {
-    foreignKey: 'sku_id',
-    as: 'images',
+// Product & ProductMeta (1-N)
+database.Product.hasMany(database.ProductMeta, {
+    foreignKey: 'product_id',
+    as: 'meta',
 });
-database.ProductImage.belongsTo(database.SKU, {
-    foreignKey: 'sku_id',
-    as: 'sku',
+database.ProductMeta.belongsTo(database.Product, {
+    foreignKey: 'product_id',
+    as: 'product',
 });
 
 // Product & Category (Many-to-Many through product_categories)
@@ -200,30 +192,6 @@ database.Category.hasMany(database.Category, {
 database.Category.belongsTo(database.Category, {
     foreignKey: 'parent_id',
     as: 'parent',
-});
-
-// Attribute 1-N AttributeOption
-database.Attribute.hasMany(database.AttributeOption, {
-    foreignKey: 'attribute_id',
-    as: 'options',
-});
-database.AttributeOption.belongsTo(database.Attribute, {
-    foreignKey: 'attribute_id',
-    as: 'attribute',
-});
-
-// AttributeOption N-M SKU (through sku_attribute_options)
-database.AttributeOption.belongsToMany(database.SKU, {
-    through: 'sku_attribute_options',
-    foreignKey: 'attribute_option_id',
-    otherKey: 'sku_id',
-    as: 'skus',
-});
-database.SKU.belongsToMany(database.AttributeOption, {
-    through: 'sku_attribute_options',
-    foreignKey: 'sku_id',
-    otherKey: 'attribute_option_id',
-    as: 'attributeOptions',
 });
 
 // Order & User
@@ -257,15 +225,15 @@ database.OrderLineItem.belongsTo(database.Order, {
 });
 
 // Order & SKU (Many-to-Many through OrderLineItem)
-database.Order.belongsToMany(database.SKU, {
+database.Order.belongsToMany(database.Product, {
     through: database.OrderLineItem,
     foreignKey: 'order_id',
-    otherKey: 'sku_id',
-    as: 'skus',
+    otherKey: 'product_id',
+    as: 'products',
 });
-database.SKU.belongsToMany(database.Order, {
+database.Product.belongsToMany(database.Order, {
     through: database.OrderLineItem,
-    foreignKey: 'sku_id',
+    foreignKey: 'product_id',
     otherKey: 'order_id',
     as: 'orders',
 });
@@ -290,26 +258,26 @@ database.CartLineItem.belongsTo(database.Cart, {
     as: 'cart',
 });
 
-// CartLineItem & SKU
-database.CartLineItem.belongsTo(database.SKU, {
-    foreignKey: 'sku_id',
-    as: 'sku',
+// CartLineItem & Product
+database.CartLineItem.belongsTo(database.Product, {
+    foreignKey: 'product_id',
+    as: 'product',
 });
-database.SKU.hasMany(database.CartLineItem, {
-    foreignKey: 'sku_id',
+database.Product.hasMany(database.CartLineItem, {
+    foreignKey: 'product_id',
     as: 'cartLineItems',
 });
 
-// Cart & SKU (Many-to-Many through CartLineItem)
-database.Cart.belongsToMany(database.SKU, {
+// Cart & Product (Many-to-Many through CartLineItem)
+database.Cart.belongsToMany(database.Product, {
     through: database.CartLineItem,
     foreignKey: 'cart_id',
-    otherKey: 'sku_id',
-    as: 'skus',
+    otherKey: 'product_id',
+    as: 'products',
 });
-database.SKU.belongsToMany(database.Cart, {
+database.Product.belongsToMany(database.Cart, {
     through: database.CartLineItem,
-    foreignKey: 'sku_id',
+    foreignKey: 'product_id',
     otherKey: 'cart_id',
     as: 'carts',
 });
@@ -344,27 +312,27 @@ database.ImportReceiptDetail.belongsTo(database.ImportReceipt, {
     as: 'importReceipt',
 });
 
-// ImportReceipt & SKU (Many-to-Many through ImportReceiptDetail)
-database.ImportReceipt.belongsToMany(database.SKU, {
+// ImportReceipt & Product (Many-to-Many through ImportReceiptDetail)
+database.ImportReceipt.belongsToMany(database.Product, {
     through: database.ImportReceiptDetail,
     foreignKey: 'import_receipt_id',
-    otherKey: 'sku_id',
-    as: 'skus',
+    otherKey: 'product_id',
+    as: 'products',
 });
-database.SKU.belongsToMany(database.ImportReceipt, {
+database.Product.belongsToMany(database.ImportReceipt, {
     through: database.ImportReceiptDetail,
-    foreignKey: 'sku_id',
+    foreignKey: 'product_id',
     otherKey: 'import_receipt_id',
     as: 'importReceipts',
 });
 
-// ImportReceiptDetail & SKU (N-1)
-database.ImportReceiptDetail.belongsTo(database.SKU, {
-    foreignKey: 'sku_id',
-    as: 'sku',
+// ImportReceiptDetail & Product (N-1)
+database.ImportReceiptDetail.belongsTo(database.Product, {
+    foreignKey: 'product_id',
+    as: 'product',
 });
-database.SKU.hasMany(database.ImportReceiptDetail, {
-    foreignKey: 'sku_id',
+database.Product.hasMany(database.ImportReceiptDetail, {
+    foreignKey: 'product_id',
     as: 'importReceiptDetails',
 });
 

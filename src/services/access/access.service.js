@@ -89,7 +89,11 @@ class AccessService {
                 userId: foundAccount.id,
                 username: foundAccount.user_login,
                 email: foundAccount.user_email,
-                role: foundAccount.role ? foundAccount.role.name : undefined,
+                role: {
+                    id: foundAccount.role.id,
+                    name: foundAccount.role.name,
+                    description: foundAccount.role.description,
+                },
             },
         };
     };
