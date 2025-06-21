@@ -70,6 +70,27 @@ const router = express.Router();
  *     responses:
  *       200:
  *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 tokens:
+ *                   type: object
+ *                   properties:
+ *                     accessToken:
+ *                       type: string
+ *                     refreshToken:
+ *                       type: string
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     userId:
+ *                       type: string
+ *                     username:
+ *                       type: string
+ *                     role:
+ *                       type: string
  *       400:
  *         description: Invalid credentials
  *       401:
@@ -89,9 +110,9 @@ const router = express.Router();
  *           schema:
  *             type: object
  *             required:
- *               - userCode
+ *               - userId
  *             properties:
- *               userCode:
+ *               userId:
  *                 type: string
  *                 description: User code of the logged-in account
  *     responses:
@@ -136,7 +157,7 @@ const router = express.Router();
  *                 user:
  *                   type: object
  *                   properties:
- *                     userCode:
+ *                     userId:
  *                       type: string
  *                     username:
  *                       type: string
@@ -181,7 +202,7 @@ const router = express.Router();
  *                 user:
  *                   type: object
  *                   properties:
- *                     userCode:
+ *                     userId:
  *                       type: string
  *                     username:
  *                       type: string
@@ -193,8 +214,12 @@ const router = express.Router();
 
 router.post('/signup', asyncHandler(accessController.signUp));
 router.post('/login', asyncHandler(accessController.login));
+router.post(
+    '/customer/signup',
+    asyncHandler(accessController.signUpForCustomer),
+);
 
-// router.use(authenticationV2);
+router.use(authenticationV2);
 router.post('/logout', asyncHandler(accessController.logout));
 router.post('/refresh-token', asyncHandler(accessController.refreshToken));
 

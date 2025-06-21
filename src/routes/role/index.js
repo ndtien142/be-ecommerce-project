@@ -47,11 +47,11 @@ const router = express.Router();
  *     CreateRoleInput:
  *       type: object
  *       required:
- *         - roleName
+ *         - name
  *       properties:
- *         roleName:
+ *         name:
  *           type: string
- *         roleDescription:
+ *         description:
  *           type: string
  *         permissions:
  *           type: array
@@ -64,9 +64,9 @@ const router = express.Router();
  *       properties:
  *         id:
  *           type: integer
- *         roleName:
+ *         name:
  *           type: string
- *         roleDescription:
+ *         description:
  *           type: string
  *         permissions:
  *           type: array

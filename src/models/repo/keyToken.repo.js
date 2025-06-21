@@ -1,14 +1,14 @@
 const db = require('../../models');
 
 const createKeyToken = async ({
-    userCode,
+    userId,
     privateKey,
     publicKey,
     refreshToken = '',
 }) => {
     try {
         const foundTokens = await db.KeyToken.findOne({
-            where: { user_code: userCode },
+            where: { user_id: userId },
         });
         if (foundTokens) {
             await updateKeyToken({
@@ -24,7 +24,7 @@ const createKeyToken = async ({
             privateKey,
             publicKey,
             refreshToken,
-            user_code: userCode,
+            user_id: userId,
         });
 
         return tokens ? tokens.publicKey : null;
@@ -50,12 +50,12 @@ const updateKeyToken = async ({
 };
 
 const findKeyTokenByUserId = async (userId) => {
-    return await db.KeyToken.findOne({ where: { id: userId } });
+    return await db.KeyToken.findOne({ where: { user_id: userId } });
 };
 
 const removeKeyTokenByUserId = async (userId) => {
     const result = await db.KeyToken.destroy({
-        where: { id: userId },
+        where: { user_id: userId },
     });
     return result;
 };

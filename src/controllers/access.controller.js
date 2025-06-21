@@ -21,6 +21,12 @@ class AccessController {
             metadata: await AccessService.logout(req.body),
         }).send(res);
     };
+    signUpForCustomer = async (req, res, next) => {
+        new CREATED({
+            message: 'Registered OK',
+            metadata: await AccessService.signUpCustomer(req.body),
+        }).send(res);
+    };
     refreshToken = async (req, res, next) => {
         new SuccessResponse({
             message: 'Refresh token OK',

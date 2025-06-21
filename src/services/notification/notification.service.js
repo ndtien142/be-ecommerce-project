@@ -5,7 +5,7 @@ class NotificationService {
      * Create a notification for specific users or roles.
      * Prevents duplicate notifications for the same user, type, referenceId, and referenceType.
      * @param {object} params
-     * @param {string} params.userCode - Main user (initiator or relevant)
+     * @param {string} params.userId - Main user (initiator or relevant)
      * @param {string[]} [params.receivers] - Array of user codes to receive the notification
      * @param {string[]} [params.roles] - Array of role codes to send notification to all users of these roles
      * @param {string} params.title
@@ -15,7 +15,7 @@ class NotificationService {
      * @param {string} [params.referenceType]
      */
     static async createNotification({
-        userCode,
+        userId,
         receivers = [],
         roles = [],
         title,
@@ -50,19 +50,21 @@ class NotificationService {
                             type,
                             reference_id: referenceId,
                             reference_type: referenceType,
-                        })
+                        }),
                     );
                 }
             }
         } else if (roles && roles.length > 0) {
             // Send to all users with the specified roles
             const users = await database.Account.findAll({
-                include: [{
-                    model: database.Role,
-                    as: 'role',
-                    where: { role_code: roles },
-                    attributes: [],
-                }],
+                include: [
+                    {
+                        model: database.Role,
+                        as: 'role',
+                        where: { role_code: roles },
+                        attributes: [],
+                    },
+                ],
                 attributes: ['user_code'],
             });
             for (const user of users) {
@@ -86,15 +88,15 @@ class NotificationService {
                             type,
                             reference_id: referenceId,
                             reference_type: referenceType,
-                        })
+                        }),
                     );
                 }
             }
         } else {
-            // Default: send to main userCode
+            // Default: send to main userId
             const exists = await database.Notification.findOne({
                 where: {
-                    user_code: userCode,
+                    user_code: userId,
                     type,
                     reference_id: referenceId,
                     reference_type: referenceType,
@@ -104,7 +106,7 @@ class NotificationService {
             if (!exists) {
                 notifications.push(
                     await database.Notification.create({
-                        user_code: userCode,
+                        user_code: userId,
                         receivers,
                         roles,
                         title,
@@ -112,7 +114,7 @@ class NotificationService {
                         type,
                         reference_id: referenceId,
                         reference_type: referenceType,
-                    })
+                    }),
                 );
             }
         }
@@ -122,12 +124,12 @@ class NotificationService {
 
     /**
      * Get notifications for a user.
-     * @param {string} userCode
+     * @param {string} userId
      * @returns {Promise<Array>}
      */
-    static async getNotifications(userCode) {
+    static async getNotifications(userId) {
         return database.Notification.findAll({
-            where: { user_code: userCode },
+            where: { user_code: userId },
             order: [['create_time', 'DESC']],
         });
     }
@@ -140,19 +142,19 @@ class NotificationService {
     static async markAsRead(notificationId) {
         return database.Notification.update(
             { is_read: true },
-            { where: { id: notificationId } }
+            { where: { id: notificationId } },
         );
     }
 
     /**
      * Mark all notifications as read for a user.
-     * @param {string} userCode
+     * @param {string} userId
      * @returns {Promise}
      */
-    static async markAllAsRead(userCode) {
+    static async markAllAsRead(userId) {
         return database.Notification.update(
             { is_read: true },
-            { where: { user_code: userCode, is_read: false } }
+            { where: { user_code: userId, is_read: false } },
         );
     }
 
@@ -163,18 +165,18 @@ class NotificationService {
      */
     static async deleteNotification(notificationId) {
         return database.Notification.destroy({
-            where: { id: notificationId }
+            where: { id: notificationId },
         });
     }
 
     /**
      * Delete all notifications for a user.
-     * @param {string} userCode
+     * @param {string} userId
      * @returns {Promise}
      */
-    static async deleteAllNotifications(userCode) {
+    static async deleteAllNotifications(userId) {
         return database.Notification.destroy({
-            where: { user_code: userCode }
+            where: { user_code: userId },
         });
     }
 }

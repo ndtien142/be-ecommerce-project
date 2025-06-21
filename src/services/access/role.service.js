@@ -4,18 +4,18 @@ const { BadRequestError } = require('../../core/error.response');
 const database = require('../../models');
 
 class RoleService {
-    static async createRole({ roleName, roleDescription, permissions = [] }) {
+    static async createRole({ name, description, permissions = [] }) {
         // Check if role already exists
         const existing = await database.Role.findOne({
-            where: { role_name: roleName },
+            where: { name: name },
         });
         if (existing) {
             throw new BadRequestError('Role name already exists');
         }
 
         const role = await database.Role.create({
-            role_name: roleName,
-            role_description: roleDescription,
+            name: name,
+            description: description,
         });
 
         // Set permissions if provided (accepts array of {id, slug})
@@ -49,23 +49,22 @@ class RoleService {
             message: 'Role created successfully',
             data: {
                 id: role.id,
-                roleName: role.role_name,
-                roleDescription: role.role_description,
+                name: role.name,
+                description: role.description,
                 createdAt: role.create_time,
                 updatedAt: role.update_time,
             },
         };
     }
 
-    static async updateRole({ id, roleName, roleDescription, permissions }) {
+    static async updateRole({ id, name, description, permissions }) {
         const role = await database.Role.findByPk(id);
         if (!role) {
             throw new BadRequestError('Role not found');
         }
 
-        if (roleName) role.role_name = roleName;
-        if (roleDescription !== undefined)
-            role.role_description = roleDescription;
+        if (name) role.name = name;
+        if (description !== undefined) role.description = description;
         await role.save();
 
         // Update permissions if provided (accepts array of {id, slug})
@@ -99,8 +98,8 @@ class RoleService {
             message: 'Role updated successfully',
             data: {
                 id: role.id,
-                roleName: role.role_name,
-                roleDescription: role.role_description,
+                name: role.name,
+                description: role.description,
                 createdAt: role.create_time,
                 updatedAt: role.update_time,
             },
@@ -143,8 +142,8 @@ class RoleService {
             message: 'Get all roles successfully',
             metadata: result.rows.map((r) => ({
                 id: r.id,
-                name: r.role_name,
-                description: r.role_description,
+                name: r.name,
+                description: r.description,
                 permissions: Array.isArray(r.permissions)
                     ? r.permissions
                           .filter((p) => p != null)
@@ -186,8 +185,8 @@ class RoleService {
             message: 'Get role by ID successfully',
             metadata: {
                 id: role.id,
-                name: role.role_name,
-                description: role.role_description,
+                name: role.name,
+                description: role.description,
                 permissions:
                     role.permissions?.map((p) => ({
                         id: p.id,

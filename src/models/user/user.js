@@ -27,7 +27,8 @@ function model(sequelize) {
         },
         user_email: {
             type: DataTypes.STRING(100),
-            allowNull: true,
+            allowNull: false,
+            unique: true,
         },
         user_url: {
             type: DataTypes.STRING(255),

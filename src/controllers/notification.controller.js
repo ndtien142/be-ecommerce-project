@@ -3,7 +3,9 @@ const { SuccessResponse } = require('../core/success.response');
 
 class NotificationController {
     getNotifications = async (req, res, next) => {
-        const notifications = await NotificationService.getNotifications(req.user.userCode);
+        const notifications = await NotificationService.getNotifications(
+            req.user.userId,
+        );
         new SuccessResponse({
             message: 'Get notifications successfully',
             metadata: notifications,

@@ -11,13 +11,13 @@ function model(sequelize) {
             autoIncrement: true,
             primaryKey: true,
         },
-        role_name: {
+        name: {
             type: DataTypes.STRING(255),
             allowNull: false,
             // unique: true,
         },
-        role_description: { type: DataTypes.TEXT, allowNull: false },
-        role_status: {
+        description: { type: DataTypes.TEXT, allowNull: false },
+        status: {
             type: DataTypes.ENUM(
                 'normal',
                 'pending',

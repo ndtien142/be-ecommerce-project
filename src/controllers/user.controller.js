@@ -22,7 +22,7 @@ class UserController {
         new SuccessResponse({
             message: 'Update user successfully',
             metadata: await UserService.updateUser({
-                userCode: req.params.id,
+                userId: req.params.id,
                 ...req.body,
             }),
         }).send(res);

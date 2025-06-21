@@ -27,27 +27,6 @@ const router = express.Router();
  *           type: boolean
  *         sortOrder:
  *           type: integer
- *     SKU:
- *       type: object
- *       properties:
- *         id:
- *           type: integer
- *         skuCode:
- *           type: string
- *         skuName:
- *           type: string
- *         price:
- *           type: number
- *         stock:
- *           type: integer
- *         minStock:
- *           type: integer
- *         status:
- *           type: string
- *         images:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/ProductImage'
  *     Brand:
  *       type: object
  *       properties:
@@ -60,6 +39,15 @@ const router = express.Router();
  *         logoUrl:
  *           type: string
  *         status:
+ *           type: string
+ *     ProductMeta:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *         metaKey:
+ *           type: string
+ *         metaValue:
  *           type: string
  *     Product:
  *       type: object
@@ -80,10 +68,42 @@ const router = express.Router();
  *           type: string
  *         brand:
  *           $ref: '#/components/schemas/Brand'
- *         skus:
+ *         images:
  *           type: array
  *           items:
- *             $ref: '#/components/schemas/SKU'
+ *             $ref: '#/components/schemas/ProductImage'
+ *         meta:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/ProductMeta'
+ *         price:
+ *           type: number
+ *         stock:
+ *           type: integer
+ *         minStock:
+ *           type: integer
+ *         weight:
+ *           type: number
+ *         width:
+ *           type: number
+ *         height:
+ *           type: number
+ *         length:
+ *           type: number
+ *         isFeatured:
+ *           type: boolean
+ *         isNew:
+ *           type: boolean
+ *         isSale:
+ *           type: boolean
+ *         isBestSeller:
+ *           type: boolean
+ *         isHot:
+ *           type: boolean
+ *         categories:
+ *           type: array
+ *           items:
+ *             type: object
  *         createTime:
  *           type: string
  *           format: date-time
@@ -94,16 +114,12 @@ const router = express.Router();
  *       type: object
  *       required:
  *         - name
- *         - productType
  *         - slug
  *       properties:
  *         name:
  *           type: string
  *         description:
  *           type: string
- *         productType:
- *           type: string
- *           enum: [simple, product_variants]
  *         thumbnail:
  *           type: string
  *         slug:
@@ -114,10 +130,38 @@ const router = express.Router();
  *           type: integer
  *         brand:
  *           $ref: '#/components/schemas/Brand'
- *         skus:
+ *         price:
+ *           type: number
+ *         stock:
+ *           type: integer
+ *         minStock:
+ *           type: integer
+ *         weight:
+ *           type: number
+ *         width:
+ *           type: number
+ *         height:
+ *           type: number
+ *         length:
+ *           type: number
+ *         isFeatured:
+ *           type: boolean
+ *         isNew:
+ *           type: boolean
+ *         isSale:
+ *           type: boolean
+ *         isBestSeller:
+ *           type: boolean
+ *         isHot:
+ *           type: boolean
+ *         meta:
  *           type: array
  *           items:
- *             $ref: '#/components/schemas/SKU'
+ *             $ref: '#/components/schemas/ProductMeta'
+ *         categories:
+ *           type: array
+ *           items:
+ *             type: integer
  *     UpdateProductInput:
  *       type: object
  *       properties:
@@ -125,8 +169,6 @@ const router = express.Router();
  *           type: string
  *         description:
  *           type: string
- *         productType:
- *           type: string
  *         thumbnail:
  *           type: string
  *         slug:
@@ -137,10 +179,38 @@ const router = express.Router();
  *           type: integer
  *         brand:
  *           $ref: '#/components/schemas/Brand'
- *         skus:
+ *         price:
+ *           type: number
+ *         stock:
+ *           type: integer
+ *         minStock:
+ *           type: integer
+ *         weight:
+ *           type: number
+ *         width:
+ *           type: number
+ *         height:
+ *           type: number
+ *         length:
+ *           type: number
+ *         isFeatured:
+ *           type: boolean
+ *         isNew:
+ *           type: boolean
+ *         isSale:
+ *           type: boolean
+ *         isBestSeller:
+ *           type: boolean
+ *         isHot:
+ *           type: boolean
+ *         meta:
  *           type: array
  *           items:
- *             $ref: '#/components/schemas/SKU'
+ *             $ref: '#/components/schemas/ProductMeta'
+ *         categories:
+ *           type: array
+ *           items:
+ *             type: integer
  */
 
 /**
