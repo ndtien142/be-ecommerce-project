@@ -200,7 +200,7 @@ class AccessService {
         dateOfBirth,
     }) => {
         // step 1: check username exist
-        const existingAccount = await getAccountByUsername(username);
+        const existingAccount = await getAccountByUserLogin(username);
         if (existingAccount) {
             throw new BadRequestError('Error: Username already registered!');
         }
@@ -268,8 +268,6 @@ class AccessService {
                     username: newAccount.user_login,
                     email: newAccount.user_email,
                     role: newAccount.role ? newAccount.role.name : undefined,
-                    isActive: newAccount.is_active,
-                    isBlock: newAccount.is_block,
                 },
                 tokens: tokens,
             };
