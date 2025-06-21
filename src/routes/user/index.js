@@ -47,7 +47,7 @@ router.use(authenticationV2);
  *     User:
  *       type: object
  *       properties:
- *         userCode:
+ *         userId:
  *           type: string
  *         username:
  *           type: string
@@ -89,7 +89,7 @@ router.use(authenticationV2);
  *     UpdateUserInput:
  *       type: object
  *       required:
- *         - userCode
+ *         - userId
  *       properties:
  *         username:
  *           type: string
@@ -119,7 +119,7 @@ router.use(authenticationV2);
  *     security:
  *       - BearerAuth: []
  *     parameters:
- *       - $ref: '#/components/parameters/UserCodeHeader'
+ *       - $ref: '#/components/parameters/userIdHeader'
  *       - $ref: '#/components/parameters/RefreshTokenHeader'
  *     tags: [User]
  *     requestBody:
@@ -145,7 +145,7 @@ router.use(authenticationV2);
  *     security:
  *       - BearerAuth: []
  *     parameters:
- *       - $ref: '#/components/parameters/UserCodeHeader'
+ *       - $ref: '#/components/parameters/userIdHeader'
  *       - $ref: '#/components/parameters/RefreshTokenHeader'
  *       - in: query
  *         name: page
@@ -189,7 +189,7 @@ router.use(authenticationV2);
  *     security:
  *       - BearerAuth: []
  *     parameters:
- *       - $ref: '#/components/parameters/UserCodeHeader'
+ *       - $ref: '#/components/parameters/userIdHeader'
  *       - $ref: '#/components/parameters/RefreshTokenHeader'
  *       - in: path
  *         name: id
@@ -214,7 +214,7 @@ router.use(authenticationV2);
  *     security:
  *       - BearerAuth: []
  *     parameters:
- *       - $ref: '#/components/parameters/UserCodeHeader'
+ *       - $ref: '#/components/parameters/userIdHeader'
  *       - $ref: '#/components/parameters/RefreshTokenHeader'
  *       - in: path
  *         name: id
@@ -245,7 +245,7 @@ router.use(authenticationV2);
  *     security:
  *       - BearerAuth: []
  *     parameters:
- *       - $ref: '#/components/parameters/UserCodeHeader'
+ *       - $ref: '#/components/parameters/userIdHeader'
  *       - $ref: '#/components/parameters/RefreshTokenHeader'
  *       - in: path
  *         name: id
@@ -261,7 +261,7 @@ router.use(authenticationV2);
  *             schema:
  *               type: object
  *               properties:
- *                 userCode:
+ *                 userId:
  *                   type: string
  *                 isDeleted:
  *                   type: boolean
@@ -275,7 +275,7 @@ router.use(authenticationV2);
  *     security:
  *       - BearerAuth: []
  *     parameters:
- *       - $ref: '#/components/parameters/UserCodeHeader'
+ *       - $ref: '#/components/parameters/userIdHeader'
  *       - $ref: '#/components/parameters/RefreshTokenHeader'
  *       - in: path
  *         name: id
@@ -300,7 +300,7 @@ router.use(authenticationV2);
  *             schema:
  *               type: object
  *               properties:
- *                 userCode:
+ *                 userId:
  *                   type: string
  *                 isBlock:
  *                   type: boolean

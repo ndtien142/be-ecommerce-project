@@ -14,7 +14,12 @@ class RoleController {
     updateRole = async (req, res, next) => {
         new SuccessResponse({
             message: 'Update role successfully',
-            metadata: await RoleService.updateRole(req.body),
+            metadata: await RoleService.updateRole({
+                id: req.body.id,
+                name: req.body.name,
+                description: req.body.description,
+                permissions: req.body.permissions,
+            }),
         }).send(res);
     };
 

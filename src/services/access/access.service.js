@@ -3,7 +3,7 @@
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { createTokenPair, verifyJWT } = require('../../auth/authUtils');
-const { getInfoData, generateUserCode } = require('../../utils');
+const { getInfoData } = require('../../utils');
 const {
     BadRequestError,
     AuthFailureError,
@@ -13,7 +13,7 @@ const {
 const { getRoleByName } = require('../../models/repo/role.repo');
 const {
     createAccount,
-    getAccountByUsername,
+    getAccountByUserLogin,
 } = require('../../models/repo/user.repo');
 const {
     createKeyToken,
@@ -33,21 +33,22 @@ class AccessService {
         4 - generate tokens
         5 - get data return login
     */
-    static login = async ({ userLogin, password, refreshToken = null }) => {
+    static login = async ({ username, password, refreshToken = null }) => {
         // 1
-        const foundAccount = await database.Account.findOne({
-            where: { user_login: userLogin },
+        const foundAccount = await database.User.findOne({
+            where: { user_login: username },
+            include: [{ model: database.Role, as: 'role' }],
         });
         if (!foundAccount) throw new BadRequestError('Username not registered');
         // 2
         const matchPassword = await bcrypt.compare(
             password,
-            foundAccount.password,
+            foundAccount.user_pass,
         );
         if (!matchPassword) throw new AuthFailureError('Authentication Error');
 
-        if (foundAccount.is_block || !foundAccount.is_active)
-            throw new AuthFailureError('Account has something wrong');
+        // if (foundAccount.is_block || !foundAccount.is_active)
+        //     throw new AuthFailureError('Account has something wrong');
 
         // 3
         const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
@@ -66,12 +67,17 @@ class AccessService {
 
         // 4
         const tokens = await createTokenPair(
-            { userCode: foundAccount.user_code, username },
+            {
+                userId: foundAccount.id,
+                username: foundAccount.user_login,
+                role: foundAccount.role ? foundAccount.role : undefined,
+                email: foundAccount.user_email,
+            },
             publicKey,
             privateKey,
         );
         await createKeyToken({
-            userCode: foundAccount.user_code,
+            userId: foundAccount.id,
             refreshToken: tokens.refreshToken,
             privateKey,
             publicKey,
@@ -80,15 +86,23 @@ class AccessService {
             code: 200,
             tokens,
             user: {
-                userCode: foundAccount.user_code,
-                username: foundAccount.username,
+                userId: foundAccount.id,
+                username: foundAccount.user_login,
+                email: foundAccount.user_email,
+                role: foundAccount.role ? foundAccount.role.name : undefined,
             },
         };
     };
 
-    static signUp = async ({ username, password, roleName }) => {
+    static signUp = async ({
+        username,
+        password,
+        roleName,
+        email,
+        dateOfBirth,
+    }) => {
         // step 1: check username exist
-        const existingAccount = await getAccountByUsername(username);
+        const existingAccount = await getAccountByUserLogin(username);
         if (existingAccount) {
             throw new BadRequestError('Error: Username already registered!');
         }
@@ -108,10 +122,11 @@ class AccessService {
             }
         }
         const newAccount = await createAccount({
-            userCode: generateUserCode(),
             username,
             password: passwordHash,
             roleId: role.id,
+            email,
+            dateOfBirth,
         });
 
         if (newAccount) {
@@ -138,7 +153,7 @@ class AccessService {
             );
             // if exist handle save to collection KeyStore
             const publicKeyString = await createKeyToken({
-                userCode: newAccount.user_code,
+                userId: newAccount.id,
                 publicKey,
                 privateKey,
             });
@@ -150,17 +165,21 @@ class AccessService {
             const publicKeyObject = crypto.createPublicKey(publicKeyString);
             // create token pair
             const tokens = await createTokenPair(
-                { userCode: newAccount.user_code, username },
+                { userId: newAccount.id, username: newAccount.user_login },
                 publicKeyObject,
                 privateKey,
             );
 
             return {
                 code: 201,
-                user: getInfoData({
-                    fields: ['user_code', 'username', 'is_active', 'is_block'],
-                    object: newAccount,
-                }),
+                user: {
+                    userId: newAccount.id,
+                    username: newAccount.user_login,
+                    email: newAccount.user_email,
+                    role: newAccount.role ? newAccount.role.name : undefined,
+                    isActive: newAccount.is_active,
+                    isBlock: newAccount.is_block,
+                },
                 tokens: tokens,
             };
         }
@@ -170,7 +189,12 @@ class AccessService {
         };
     };
 
-    static signUpCustomer = async ({ username, password }) => {
+    static signUpCustomer = async ({
+        username,
+        password,
+        email,
+        dateOfBirth,
+    }) => {
         // step 1: check username exist
         const existingAccount = await getAccountByUsername(username);
         if (existingAccount) {
@@ -185,8 +209,9 @@ class AccessService {
         }
 
         const newAccount = await createAccount({
-            userCode: generateUserCode(),
             username,
+            email,
+            dateOfBirth,
             password: passwordHash,
             roleId: role.id,
         });
@@ -215,7 +240,7 @@ class AccessService {
             );
             // if exist handle save to collection KeyStore
             const publicKeyString = await createKeyToken({
-                userCode: newAccount.user_code,
+                userId: newAccount.id,
                 publicKey,
                 privateKey,
             });
@@ -227,17 +252,21 @@ class AccessService {
             const publicKeyObject = crypto.createPublicKey(publicKeyString);
             // create token pair
             const tokens = await createTokenPair(
-                { userCode: newAccount.user_code, username },
+                { userId: newAccount.user_code, username },
                 publicKeyObject,
                 privateKey,
             );
 
             return {
                 code: 201,
-                user: getInfoData({
-                    fields: ['user_code', 'username', 'is_active', 'is_block'],
-                    object: newAccount,
-                }),
+                user: {
+                    userId: newAccount.id,
+                    username: newAccount.user_login,
+                    email: newAccount.user_email,
+                    role: newAccount.role ? newAccount.role.name : undefined,
+                    isActive: newAccount.is_active,
+                    isBlock: newAccount.is_block,
+                },
                 tokens: tokens,
             };
         }
@@ -274,12 +303,12 @@ class AccessService {
         } catch (err) {
             throw new ForbiddenError('Refresh token verification failed.');
         }
-        const { userCode, username } = decoded;
+        const { userId, username, role, email } = decoded;
 
         // 4 - Save refresh token used
         await database.RefreshTokenUsed.create({
             token: refreshToken,
-            user_code: userCode,
+            user_id: userId,
         });
 
         // 5 - Generate new token pair
@@ -297,12 +326,12 @@ class AccessService {
 
         // 6 - Create new key token
         const tokens = await createTokenPair(
-            { userCode, username },
+            { userId, username, role, email },
             publicKey,
             privateKey,
         );
         const newKeyToken = await createKeyToken({
-            userCode,
+            userId,
             refreshToken: tokens.refreshToken,
             privateKey,
             publicKey,
@@ -320,7 +349,7 @@ class AccessService {
         return {
             code: 200,
             tokens: tokens,
-            user: { userCode, username },
+            user: { userId, username, role, email },
         };
     };
 }

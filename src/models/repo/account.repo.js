@@ -26,8 +26,8 @@ const createAccount = async ({
     return result;
 };
 
-const getAccountByUserCode = async (user_login) => {
-    return await db.User.findByPk(user_login);
+const getAccountByUserId = async (userId) => {
+    return await db.User.findByPk(userId);
 };
 
 const getAllAccount = async () => {
@@ -86,16 +86,16 @@ const blockAccount = async (user_login) => {
     );
 };
 
-const getAccountByUsername = async (user_login) => {
+const getAccountByUserLogin = async (user_login) => {
     return db.User.findOne({ where: { user_login } });
 };
 
 module.exports = {
     createAccount,
-    getAccountByUserCode,
+    getAccountByUserId,
     getAllAccount,
     updateAccount,
     deleteAccount,
     blockAccount,
-    getAccountByUsername,
+    getAccountByUserLogin,
 };

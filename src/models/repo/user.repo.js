@@ -1,31 +1,33 @@
 const db = require('..');
 
 const createAccount = async ({
-    user_login,
-    user_pass,
-    user_nickname,
-    user_email,
-    user_url,
-    user_registered,
-    user_status = 0,
-    user_date_of_birth,
+    username,
+    password,
+    nickname,
+    email,
+    roleId,
+    dateOfBirth = null,
+    avatarUrl,
+    registered = new Date(),
+    status = 'normal',
 }) => {
     const result = await db.User.create({
-        user_login,
-        user_pass,
-        user_nickname,
-        user_email,
-        user_url,
-        user_registered,
-        user_status,
-        user_date_of_birth,
+        user_login: username,
+        user_pass: password,
+        user_nickname: nickname,
+        user_email: email,
+        user_url: avatarUrl,
+        user_registered: registered,
+        user_status: status,
+        user_date_of_birth: dateOfBirth,
+        role_id: roleId,
     });
     console.log(result);
     return result;
 };
 
-const getAccountByUserCode = async (user_login) => {
-    return await db.User.findByPk(user_login);
+const getAccountByUserId = async (userId) => {
+    return await db.User.findByPk(userId);
 };
 
 const getAllAccount = async () => {
@@ -72,16 +74,16 @@ const blockAccount = async (user_login) => {
     );
 };
 
-const getAccountByUsername = async (user_login) => {
+const getAccountByUserLogin = async (user_login) => {
     return db.User.findOne({ where: { user_login } });
 };
 
 module.exports = {
     createAccount,
-    getAccountByUserCode,
+    getAccountByUserId,
     getAllAccount,
     updateAccount,
     deleteAccount,
     blockAccount,
-    getAccountByUsername,
+    getAccountByUserLogin,
 };

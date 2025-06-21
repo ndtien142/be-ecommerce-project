@@ -1,9 +1,9 @@
 const db = require('../../models');
 
-const createRole = async ({ roleName, roleDescription }) => {
+const createRole = async ({ name, description }) => {
     return await db.Role.create({
-        role_name: roleName,
-        role_description: roleDescription,
+        name,
+        description,
     });
 };
 const getRoleById = async (id) => {
@@ -12,18 +12,18 @@ const getRoleById = async (id) => {
 const getAllRoles = async () => {
     return await db.Role.findAll();
 };
-const updateRole = async ({ id, roleName, roleDescription }) => {
+const updateRole = async ({ id, name, description }) => {
     return await db.Role.update(
         {
-            role_name: roleName,
-            role_description: roleDescription,
+            name,
+            description,
         },
-        { where: { id: id } },
+        { where: { id } },
     );
 };
 
-const getRoleByName = async (roleName) => {
-    return db.Role.findOne({ where: { role_name: roleName } });
+const getRoleByName = async (name) => {
+    return db.Role.findOne({ where: { name } });
 };
 
 module.exports = {

@@ -2,7 +2,7 @@
 
 const bcrypt = require('bcrypt');
 const database = require('../../models');
-const { generateUserCode } = require('../../utils');
+const { generateuserId } = require('../../utils');
 const { BadRequestError } = require('../../core/error.response');
 
 class UserService {
@@ -34,7 +34,7 @@ class UserService {
 
             const newAccount = await database.Account.create(
                 {
-                    user_code: generateUserCode(),
+                    user_code: generateuserId(),
                     username,
                     password: passwordHash,
                     fk_role_id: role.id,
@@ -59,7 +59,7 @@ class UserService {
             await transaction.commit();
 
             return {
-                userCode: account.user_code,
+                userId: account.user_code,
                 username: account.username,
                 roleId: account.fk_role_id,
                 isActive: account.is_active,
@@ -82,7 +82,7 @@ class UserService {
     }
 
     static async updateUser({
-        userCode,
+        userId,
         username,
         avatarUrl,
         roleId,
@@ -95,7 +95,7 @@ class UserService {
     }) {
         const transaction = await database.Account.sequelize.transaction();
         try {
-            const account = await database.Account.findByPk(userCode);
+            const account = await database.Account.findByPk(userId);
             if (!account) {
                 throw new BadRequestError('User not found');
             }
@@ -108,7 +108,7 @@ class UserService {
             await account.save({ transaction });
 
             const profile = await database.Profile.findOne({
-                where: { fk_user_code: userCode },
+                where: { fk_user_code: userId },
             });
             if (!profile) {
                 throw new Error('Profile not found');
@@ -129,8 +129,8 @@ class UserService {
         }
     }
 
-    static async markUserAsDeleted(userCode) {
-        const account = await database.Account.findByPk(userCode);
+    static async markUserAsDeleted(userId) {
+        const account = await database.Account.findByPk(userId);
         if (!account) {
             throw new Error('User not found');
         }
@@ -138,13 +138,13 @@ class UserService {
         account.is_delete = true;
         await account.save();
         return {
-            userCode,
+            userId,
             isDeleted: account.is_delete,
         };
     }
 
-    static async markUserAsBlocked(userCode, isBlock) {
-        const account = await database.Account.findByPk(userCode);
+    static async markUserAsBlocked(userId, isBlock) {
+        const account = await database.Account.findByPk(userId);
         if (!account) {
             throw new Error('User not found');
         }
@@ -152,13 +152,13 @@ class UserService {
         account.is_block = isBlock;
         await account.save();
         return {
-            userCode,
+            userId,
             isBlock: account.is_block,
         };
     }
 
-    static async getUser(userCode) {
-        const account = await database.Account.findByPk(userCode, {
+    static async getUser(userId) {
+        const account = await database.Account.findByPk(userId, {
             include: [
                 {
                     model: database.Profile,
@@ -176,7 +176,7 @@ class UserService {
         }
 
         return {
-            userCode: account.user_code,
+            userId: account.user_code,
             username: account.username,
             isActive: account.is_active,
             isBlock: account.is_block,
@@ -226,7 +226,7 @@ class UserService {
         return {
             items: accounts.map((account) => {
                 return {
-                    userCode: account.user_code,
+                    userId: account.user_code,
                     username: account.username,
                     isActive: account.is_active,
                     isBlock: account.is_block,

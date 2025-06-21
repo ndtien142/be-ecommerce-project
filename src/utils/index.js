@@ -2,7 +2,7 @@ const _ = require('lodash');
 const { Types } = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 
-const generateUserCode = () => {
+const generateUserId = () => {
     return uuidv4().replace(/-/g, '').slice(0, 20);
 };
 
@@ -90,6 +90,6 @@ module.exports = {
     removeUndefinedObject,
     updateNestedObject,
     convertToObjectIdMongodb,
-    generateUserCode,
+    generateUserId,
     getKeyByValue,
 };
