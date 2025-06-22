@@ -22,6 +22,7 @@ class ProductService {
         length,
         priceSale,
         sold,
+        categories = [],
         inventoryType,
         productType,
         flag,
@@ -99,6 +100,20 @@ class ProductService {
             }));
         }
 
+        // Validate categories
+        if (categories !== undefined && categories !== null) {
+            if (!Array.isArray(categories)) {
+                throw new BadRequestError('categories must be an array');
+            }
+            for (const catId of categories) {
+                if (isNaN(Number(catId))) {
+                    throw new BadRequestError(
+                        'Each category id must be a number',
+                    );
+                }
+            }
+        }
+
         // Start transaction
         const transaction = await database.sequelize.transaction();
         try {
@@ -126,6 +141,14 @@ class ProductService {
                 },
                 { transaction },
             );
+            // Set categories if provided
+            if (
+                Array.isArray(categories) &&
+                categories.length > 0 &&
+                product.setCategories
+            ) {
+                await product.setCategories(categories, { transaction });
+            }
             // Set tags if provided
             if (Array.isArray(tags) && tags.length > 0 && product.setTags) {
                 await product.setTags(tags, { transaction });
