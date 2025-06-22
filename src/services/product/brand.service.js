@@ -48,7 +48,7 @@ class BrandService {
         return toCamel(brand.toJSON());
     }
 
-    static async getAllProducts({ page = 1, limit = 20 }) {
+    static async getAllBrands({ page = 1, limit = 20 }) {
         limit = Number(limit) || 20;
         page = Number(page) || 1;
         const offset = (page - 1) * limit;

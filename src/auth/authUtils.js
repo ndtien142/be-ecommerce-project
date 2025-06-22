@@ -7,7 +7,7 @@ const { findKeyTokenByUserId } = require('../models/repo/keyToken.repo');
 
 const HEADER = {
     // API_KEY: "x-api-key",
-    USER_CODE: 'x-user-code',
+    USER_ID: 'x-user-id',
     AUTHORIZATION: 'authorization',
     REFRESH_TOKEN: 'x-rf-token',
 };
@@ -89,7 +89,7 @@ const authenticationV2 = asyncHandler(async (req, res, next) => {
         5 - check keyStore with this userId
         6 - OK all => return next
      */
-    const userId = req.headers[HEADER.USER_CODE];
+    const userId = req.headers[HEADER.USER_ID];
     if (!userId) throw new AuthFailureError('Invalid Request');
 
     // 2
@@ -127,7 +127,7 @@ const authenticationV2 = asyncHandler(async (req, res, next) => {
 
     try {
         const decodedUser = JWT.verify(accessToken, keyStore.publicKey);
-        if (userId !== decodedUser.userId)
+        if (Number(userId) !== decodedUser.userId)
             throw new AuthFailureError('Invalid userId');
         req.keyStore = keyStore;
         // assign user id to request

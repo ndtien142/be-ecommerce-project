@@ -7,14 +7,21 @@ const router = express.Router();
 
 /**
  * @swagger
- * tags:
- *   name: Brand
- *   description: Brand management APIs
- */
-
-/**
- * @swagger
  * components:
+ *   parameters:
+ *     userId:
+ *       in: header
+ *       name: x-user-id
+ *       required: true
+ *       schema:
+ *         type: string
+ *       description: User ID for authentication
+ *     RefreshTokenHeader:
+ *       in: header
+ *       name: x-rf-token
+ *       required: false
+ *       schema:
+ *         type: string
  *   schemas:
  *     Brand:
  *       type: object
@@ -61,6 +68,9 @@ const router = express.Router();
  *   post:
  *     summary: Create a new brand
  *     tags: [Brand]
+ *     parameters:
+ *       - $ref: '#/components/parameters/userId'
+ *       - $ref: '#/components/parameters/RefreshTokenHeader'
  *     requestBody:
  *       required: true
  *       content:
@@ -83,6 +93,8 @@ const router = express.Router();
  *     summary: Get all brands
  *     tags: [Brand]
  *     parameters:
+ *       - $ref: '#/components/parameters/userId'
+ *       - $ref: '#/components/parameters/RefreshTokenHeader'
  *       - in: query
  *         name: page
  *         schema:
@@ -123,6 +135,8 @@ const router = express.Router();
  *     summary: Get brand by ID
  *     tags: [Brand]
  *     parameters:
+ *       - $ref: '#/components/parameters/userId'
+ *       - $ref: '#/components/parameters/RefreshTokenHeader'
  *       - in: path
  *         name: id
  *         required: true
@@ -144,6 +158,8 @@ const router = express.Router();
  *     summary: Update a brand
  *     tags: [Brand]
  *     parameters:
+ *       - $ref: '#/components/parameters/userId'
+ *       - $ref: '#/components/parameters/RefreshTokenHeader'
  *       - in: path
  *         name: id
  *         required: true
@@ -171,6 +187,8 @@ const router = express.Router();
  *     summary: Delete a brand (set status to inactive)
  *     tags: [Brand]
  *     parameters:
+ *       - $ref: '#/components/parameters/userId'
+ *       - $ref: '#/components/parameters/RefreshTokenHeader'
  *       - in: path
  *         name: id
  *         required: true
