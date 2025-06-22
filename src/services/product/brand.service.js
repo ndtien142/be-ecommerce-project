@@ -2,22 +2,7 @@
 
 const { BadRequestError, NotFoundError } = require('../../core/error.response');
 const database = require('../../models');
-
-// Helper to convert snake_case keys to camelCase recursively
-function toCamel(obj) {
-    if (Array.isArray(obj)) {
-        return obj.map((v) => toCamel(v));
-    } else if (obj && typeof obj === 'object') {
-        return Object.entries(obj).reduce((acc, [key, value]) => {
-            const camelKey = key.replace(/_([a-z])/g, (g) =>
-                g[1].toUpperCase(),
-            );
-            acc[camelKey] = toCamel(value);
-            return acc;
-        }, {});
-    }
-    return obj;
-}
+const { toCamel } = require('../../utils/common.utils');
 
 class BrandService {
     static async createBrand({

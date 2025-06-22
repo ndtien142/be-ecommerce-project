@@ -1,8 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
-export const generateuserId = () => {
-    return uuidv4().replace(/-/g, '').slice(0, 20);
-};
-
 export const getUnSelectData = (unSelect = []) => {
     return Object.fromEntries(unSelect.map((el) => [el, 0]));
 };
@@ -19,4 +14,23 @@ export const removeUndefinedObject = (obj) => {
 
 export const getKeyByValue = (object, value) => {
     return Object.keys(object).find((key) => object[key] === value);
+};
+
+export const toCamel = (obj) => {
+    if (Array.isArray(obj)) {
+        return obj.map((v) => toCamel(v));
+    } else if (obj && typeof obj === 'object') {
+        // Prevent recursion on Date objects
+        if (obj instanceof Date) {
+            return obj;
+        }
+        return Object.entries(obj).reduce((acc, [key, value]) => {
+            const camelKey = key.replace(/_([a-z])/g, (g) =>
+                g[1].toUpperCase(),
+            );
+            acc[camelKey] = toCamel(value);
+            return acc;
+        }, {});
+    }
+    return obj;
 };

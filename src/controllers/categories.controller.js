@@ -39,6 +39,31 @@ class CategoriesController {
             metadata: await CategoriesService.deleteCategory(req.params.id),
         }).send(res);
     };
+
+    getCategoryTree = async (req, res, next) => {
+        new SuccessResponse({
+            metadata: await CategoriesService.getCategoryTree(),
+        }).send(res);
+    };
+
+    reorderCategory = async (req, res, next) => {
+        const { categoryId, newParentId, orderedSiblingIds } = req.body;
+        new SuccessResponse({
+            message: 'Category reordered successfully',
+            metadata: await CategoriesService.updateCategoryParentAndOrder(
+                categoryId,
+                newParentId,
+                orderedSiblingIds,
+            ),
+        }).send(res);
+    };
+
+    reorderAllCategories = async (req, res, next) => {
+        new SuccessResponse({
+            message: 'All categories reordered successfully',
+            metadata: await CategoriesService.reorderFullCategoryTree(req.body),
+        }).send(res);
+    };
 }
 
 module.exports = new CategoriesController();

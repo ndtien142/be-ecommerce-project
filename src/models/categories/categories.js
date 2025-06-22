@@ -33,6 +33,14 @@ module.exports = (sequelize) => {
             allowNull: false,
             defaultValue: 'active',
         },
+        sort_order: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+        },
+        image_url: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+        },
     };
 
     const options = {
