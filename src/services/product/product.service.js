@@ -2,29 +2,14 @@
 
 const { BadRequestError, NotFoundError } = require('../../core/error.response');
 const database = require('../../models');
-
-// Helper to convert snake_case keys to camelCase recursively
-function toCamel(obj) {
-    if (Array.isArray(obj)) {
-        return obj.map((v) => toCamel(v));
-    } else if (obj && typeof obj === 'object') {
-        return Object.entries(obj).reduce((acc, [key, value]) => {
-            const camelKey = key.replace(/_([a-z])/g, (g) =>
-                g[1].toUpperCase(),
-            );
-            acc[camelKey] = toCamel(value);
-            return acc;
-        }, {});
-    }
-    return obj;
-}
+const { toCamel } = require('../../utils/common.utils');
 
 class ProductService {
     static async createProduct({
         name,
         description,
-        thumbnail,
         slug,
+        images = [],
         status = 'active',
         brand,
         brandId,
@@ -35,7 +20,13 @@ class ProductService {
         width,
         height,
         length,
-        meta = [], // array of {metaKey, metaValue}
+        priceSale,
+        sold,
+        inventoryType,
+        productType,
+        flag,
+        tags = [],
+        meta = [],
     }) {
         // Extract brandId from brand object if not provided
         if (
@@ -64,6 +55,17 @@ class ProductService {
         ) {
             throw new BadRequestError('brandId must be a number');
         }
+        // Validate inventoryType length (adjust max length as per your DB schema)
+        if (
+            inventoryType !== undefined &&
+            inventoryType !== null &&
+            typeof inventoryType === 'string' &&
+            inventoryType.length > 20
+        ) {
+            throw new BadRequestError(
+                'inventoryType is too long (max 20 chars)',
+            );
+        }
         // Check if slug already exists
         const existing = await database.Product.findOne({ where: { slug } });
         if (existing) throw new BadRequestError('Product slug already exists');
@@ -73,40 +75,103 @@ class ProductService {
             brandObj = await database.Brand.findByPk(brandId);
             if (!brandObj) throw new BadRequestError('Brand not found');
         }
-        // Create product
-        const product = await database.Product.create({
-            name,
-            description,
-            thumbnail,
-            slug,
-            status,
-            brand_id: brandId,
-            price,
-            stock,
-            min_stock: minStock,
-            weight,
-            width,
-            height,
-            length,
-        });
-        // Create meta data if provided
-        if (Array.isArray(meta) && meta.length > 0) {
-            const metaList = meta.map(({ metaKey, metaValue }) => ({
-                product_id: product.id,
-                meta_key: metaKey,
-                meta_value: metaValue,
+
+        // Validate and create product images if provided
+        let imageRecords = [];
+        if (
+            Array.isArray(images) &&
+            images.length > 0 &&
+            database.ProductImage
+        ) {
+            // Validate each image (basic: must be string, non-empty)
+            for (const img of images) {
+                if (typeof img !== 'string' || !img.trim()) {
+                    throw new BadRequestError(
+                        'Each image must be a non-empty string',
+                    );
+                }
+            }
+            // Prepare image records with correct fields
+            imageRecords = images.map((imgUrl, idx) => ({
+                image_url: imgUrl,
+                is_primary: idx === 0,
+                sort_order: idx,
             }));
-            await database.ProductMeta.bulkCreate(metaList);
         }
-        return toCamel(
-            await database.Product.findByPk(product.id, {
-                include: [
-                    { model: database.Brand, as: 'brand' },
-                    { model: database.ProductImage, as: 'images' },
-                    { model: database.ProductMeta, as: 'meta' },
-                ],
-            }).then((p) => p && p.toJSON()),
-        );
+
+        // Start transaction
+        const transaction = await database.sequelize.transaction();
+        try {
+            // Create product
+            const product = await database.Product.create(
+                {
+                    name,
+                    description,
+                    thumbnail: images[0] || null,
+                    slug,
+                    status,
+                    brand_id: brandId,
+                    price,
+                    stock,
+                    min_stock: minStock,
+                    weight,
+                    width,
+                    height,
+                    length,
+                    price_sale: priceSale,
+                    sold,
+                    inventory_type: inventoryType,
+                    product_type: productType,
+                    flag,
+                },
+                { transaction },
+            );
+            // Set tags if provided
+            if (Array.isArray(tags) && tags.length > 0 && product.setTags) {
+                await product.setTags(tags, { transaction });
+            }
+            // Create meta data if provided
+            if (
+                Array.isArray(meta) &&
+                meta.length > 0 &&
+                database.ProductMeta
+            ) {
+                const metaList = meta.map(({ metaKey, metaValue }) => ({
+                    product_id: product.id,
+                    meta_key: metaKey,
+                    meta_value: metaValue,
+                }));
+                await database.ProductMeta.bulkCreate(metaList, {
+                    transaction,
+                });
+            }
+            // Create images if provided
+            if (imageRecords.length > 0 && database.ProductImage) {
+                const imagesToCreate = imageRecords.map((img) => ({
+                    ...img,
+                    product_id: product.id,
+                }));
+                await database.ProductImage.bulkCreate(imagesToCreate, {
+                    transaction,
+                });
+            }
+            // Commit transaction
+            await transaction.commit();
+
+            return toCamel(
+                await database.Product.findByPk(product.id, {
+                    include: [
+                        { model: database.Brand, as: 'brand' },
+                        { model: database.ProductImage, as: 'images' },
+                        { model: database.ProductMeta, as: 'meta' },
+                        { model: database.Tag, as: 'tags' },
+                    ],
+                }).then((p) => p && p.toJSON()),
+            );
+        } catch (err) {
+            await transaction.rollback();
+            throw err;
+        }
     }
 
     static async getProductById(id) {
@@ -116,6 +181,7 @@ class ProductService {
                 { model: database.ProductImage, as: 'images' },
                 { model: database.Category, as: 'categories' },
                 { model: database.ProductMeta, as: 'meta' },
+                { model: database.Tag, as: 'tags' },
             ],
         });
         if (!product) throw new NotFoundError('Product not found');
@@ -134,6 +200,7 @@ class ProductService {
                 { model: database.ProductImage, as: 'images' },
                 { model: database.Category, as: 'categories' },
                 { model: database.ProductMeta, as: 'meta' },
+                { model: database.Tag, as: 'tags' },
             ],
         });
         const totalItems = products.count;
@@ -173,13 +240,21 @@ class ProductService {
             mappedData.height = updateData.height;
         if (updateData.length !== undefined)
             mappedData.length = updateData.length;
+        if (updateData.priceSale !== undefined)
+            mappedData.price_sale = updateData.priceSale;
+        if (updateData.sold !== undefined) mappedData.sold = updateData.sold;
+        if (updateData.inventoryType !== undefined)
+            mappedData.inventory_type = updateData.inventoryType;
+        if (updateData.productType !== undefined)
+            mappedData.product_type = updateData.productType;
+        if (updateData.flag !== undefined) mappedData.flag = updateData.flag;
         const [affectedRows] = await database.Product.update(mappedData, {
             where: { id },
         });
         if (!affectedRows)
             throw new NotFoundError('Product not found or not updated');
         // Optionally update meta
-        if (Array.isArray(updateData.meta)) {
+        if (Array.isArray(updateData.meta) && database.ProductMeta) {
             // Remove old meta and insert new
             await database.ProductMeta.destroy({ where: { product_id: id } });
             const metaList = updateData.meta.map(({ metaKey, metaValue }) => ({
@@ -189,11 +264,24 @@ class ProductService {
             }));
             await database.ProductMeta.bulkCreate(metaList);
         }
+        // Optionally update tags
+        if (Array.isArray(updateData.tags)) {
+            const product = await database.Product.findByPk(id);
+            if (product && product.setTags) {
+                await product.setTags(updateData.tags);
+            }
+        }
         return await ProductService.getProductById(id);
     }
 
     static async deleteProduct(id) {
-        await database.ProductMeta.destroy({ where: { product_id: id } });
+        if (database.ProductMeta) {
+            await database.ProductMeta.destroy({ where: { product_id: id } });
+        }
+        const product = await database.Product.findByPk(id);
+        if (product && product.setTags) {
+            await product.setTags([]);
+        }
         const deleted = await database.Product.destroy({ where: { id } });
         if (!deleted)
             throw new NotFoundError('Product not found or already deleted');
@@ -208,6 +296,7 @@ class ProductService {
                 { model: database.ProductImage, as: 'images' },
                 { model: database.Category, as: 'categories' },
                 { model: database.ProductMeta, as: 'meta' },
+                { model: database.Tag, as: 'tags' },
             ],
         });
         if (!product) throw new NotFoundError('Product not found');

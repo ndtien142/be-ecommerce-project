@@ -31,7 +31,7 @@ module.exports = (sequelize) => {
             unique: true,
         },
         status: {
-            type: DataTypes.ENUM('active', 'inactive', 'archived'),
+            type: DataTypes.ENUM('active', 'inactive', 'archived', 'draft'),
             allowNull: false,
             defaultValue: 'active',
         },
@@ -43,6 +43,17 @@ module.exports = (sequelize) => {
             type: DataTypes.DECIMAL(12, 2),
             allowNull: false,
             defaultValue: 0.0,
+        },
+        flag: {
+            type: DataTypes.ENUM(
+                'new',
+                'popular',
+                'featured',
+                'none',
+                'on_sale',
+            ),
+            allowNull: false,
+            defaultValue: 'none',
         },
         stock: {
             type: DataTypes.INTEGER,
@@ -70,30 +81,19 @@ module.exports = (sequelize) => {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: true,
         },
-        is_featured: {
-            type: DataTypes.BOOLEAN,
-            allowNull: false,
-            defaultValue: false,
+        price_sale: {
+            type: DataTypes.DECIMAL(12, 2),
+            allowNull: true,
         },
-        is_new: {
-            type: DataTypes.BOOLEAN,
-            allowNull: false,
-            defaultValue: false,
+        sold: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+            defaultValue: 0,
         },
-        is_sale: {
-            type: DataTypes.BOOLEAN,
+        inventory_type: {
+            type: DataTypes.ENUM('in_stock', 'out_of_stock', 'low_stock'),
             allowNull: false,
-            defaultValue: false,
-        },
-        is_best_seller: {
-            type: DataTypes.BOOLEAN,
-            allowNull: false,
-            defaultValue: false,
-        },
-        is_hot: {
-            type: DataTypes.BOOLEAN,
-            allowNull: false,
-            defaultValue: false,
+            defaultValue: 'in_stock',
         },
     };
 

@@ -15,6 +15,20 @@ const router = express.Router();
 /**
  * @swagger
  * components:
+ *   parameters:
+ *     userId:
+ *       in: header
+ *       name: x-user-id
+ *       required: true
+ *       schema:
+ *         type: string
+ *       description: User ID for authentication
+ *     RefreshTokenHeader:
+ *       in: header
+ *       name: x-rf-token
+ *       required: false
+ *       schema:
+ *         type: string
  *   schemas:
  *     ProductImage:
  *       type: object
@@ -48,6 +62,17 @@ const router = express.Router();
  *         metaKey:
  *           type: string
  *         metaValue:
+ *           type: string
+ *     Tag:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *         name:
+ *           type: string
+ *         description:
+ *           type: string
+ *         status:
  *           type: string
  *     Product:
  *       type: object
@@ -90,16 +115,24 @@ const router = express.Router();
  *           type: number
  *         length:
  *           type: number
- *         isFeatured:
- *           type: boolean
- *         isNew:
- *           type: boolean
- *         isSale:
- *           type: boolean
- *         isBestSeller:
- *           type: boolean
- *         isHot:
- *           type: boolean
+ *         code:
+ *           type: string
+ *         priceSale:
+ *           type: number
+ *         totalRating:
+ *           type: integer
+ *         totalReview:
+ *           type: integer
+ *         sold:
+ *           type: integer
+ *         inventoryType:
+ *           type: string
+ *         gender:
+ *           type: string
+ *         tags:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/Tag'
  *         categories:
  *           type: array
  *           items:
@@ -144,16 +177,24 @@ const router = express.Router();
  *           type: number
  *         length:
  *           type: number
- *         isFeatured:
- *           type: boolean
- *         isNew:
- *           type: boolean
- *         isSale:
- *           type: boolean
- *         isBestSeller:
- *           type: boolean
- *         isHot:
- *           type: boolean
+ *         code:
+ *           type: string
+ *         priceSale:
+ *           type: number
+ *         totalRating:
+ *           type: integer
+ *         totalReview:
+ *           type: integer
+ *         sold:
+ *           type: integer
+ *         inventoryType:
+ *           type: string
+ *         gender:
+ *           type: string
+ *         tags:
+ *           type: array
+ *           items:
+ *             type: integer
  *         meta:
  *           type: array
  *           items:
@@ -193,16 +234,24 @@ const router = express.Router();
  *           type: number
  *         length:
  *           type: number
- *         isFeatured:
- *           type: boolean
- *         isNew:
- *           type: boolean
- *         isSale:
- *           type: boolean
- *         isBestSeller:
- *           type: boolean
- *         isHot:
- *           type: boolean
+ *         code:
+ *           type: string
+ *         priceSale:
+ *           type: number
+ *         totalRating:
+ *           type: integer
+ *         totalReview:
+ *           type: integer
+ *         sold:
+ *           type: integer
+ *         inventoryType:
+ *           type: string
+ *         gender:
+ *           type: string
+ *         tags:
+ *           type: array
+ *           items:
+ *             type: integer
  *         meta:
  *           type: array
  *           items:
@@ -219,6 +268,8 @@ const router = express.Router();
  *   post:
  *     summary: Create a new product
  *     tags: [Product]
+ *     parameters:
+ *       - $ref: '#/components/parameters/userId'
  *     requestBody:
  *       required: true
  *       content:
@@ -241,6 +292,7 @@ const router = express.Router();
  *     summary: Get all products
  *     tags: [Product]
  *     parameters:
+ *       - $ref: '#/components/parameters/userId'
  *       - in: query
  *         name: limit
  *         schema:
@@ -272,6 +324,7 @@ const router = express.Router();
  *     summary: Get product by ID
  *     tags: [Product]
  *     parameters:
+ *       - $ref: '#/components/parameters/userId'
  *       - in: path
  *         name: id
  *         required: true
@@ -293,6 +346,7 @@ const router = express.Router();
  *     summary: Get product by slug
  *     tags: [Product]
  *     parameters:
+ *       - $ref: '#/components/parameters/userId'
  *       - in: path
  *         name: slug
  *         required: true
@@ -314,6 +368,7 @@ const router = express.Router();
  *     summary: Update a product
  *     tags: [Product]
  *     parameters:
+ *       - $ref: '#/components/parameters/userId'
  *       - in: path
  *         name: id
  *         required: true
@@ -341,6 +396,7 @@ const router = express.Router();
  *     summary: Delete a product
  *     tags: [Product]
  *     parameters:
+ *       - $ref: '#/components/parameters/userId'
  *       - in: path
  *         name: id
  *         required: true

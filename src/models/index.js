@@ -36,6 +36,7 @@ const Brand = require('./product/brand')(sequelize);
 const Product = require('./product/product')(sequelize);
 const ProductImage = require('./product/productImages')(sequelize);
 const ProductMeta = require('./product/productMeta')(sequelize);
+const Tag = require('./product/tags')(sequelize);
 
 // Import category model
 const Category = require('./categories/categories')(sequelize);
@@ -76,6 +77,7 @@ database.Brand = Brand;
 database.Product = Product;
 database.ProductImage = ProductImage;
 database.ProductMeta = ProductMeta;
+database.Tag = Tag;
 
 // Category model
 database.Category = Category;
@@ -180,6 +182,20 @@ database.Product.belongsToMany(database.Category, {
 database.Category.belongsToMany(database.Product, {
     through: 'product_categories',
     foreignKey: 'category_id',
+    otherKey: 'product_id',
+    as: 'products',
+});
+
+// Product & Tag (Many-to-Many through product_tags)
+database.Product.belongsToMany(database.Tag, {
+    through: 'product_tags',
+    foreignKey: 'product_id',
+    otherKey: 'tag_id',
+    as: 'tags',
+});
+database.Tag.belongsToMany(database.Product, {
+    through: 'product_tags',
+    foreignKey: 'tag_id',
     otherKey: 'product_id',
     as: 'products',
 });
