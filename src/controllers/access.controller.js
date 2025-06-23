@@ -33,6 +33,17 @@ class AccessController {
             metadata: await AccessService.handlerRefreshToken(req.body),
         }).send(res);
     };
+
+    changePassword = async (req, res, next) => {
+        const userId = req.user.userid;
+        new SuccessResponse({
+            message: 'Password changed successfully',
+            metadata: await AccessService.changePassword({
+                userId,
+                ...req.body,
+            }),
+        }).send(res);
+    };
 }
 
 module.exports = new AccessController();

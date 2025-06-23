@@ -211,6 +211,45 @@ const router = express.Router();
  *       404:
  *         description: Refresh token not found or expired
  */
+/**
+ * @swagger
+ * /change-password:
+ *   post:
+ *     summary: Change user password
+ *     tags: [Access]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: userid
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID from authentication header
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - oldPassword
+ *               - newPassword
+ *             properties:
+ *               oldPassword:
+ *                 type: string
+ *                 format: password
+ *                 description: Old password
+ *               newPassword:
+ *                 type: string
+ *                 format: password
+ *                 description: New password
+ *     responses:
+ *       200:
+ *         description: Password changed successfully
+ *       400:
+ *         description: Old password is incorrect or user not found
+ */
 
 router.post('/signup', asyncHandler(accessController.signUp));
 router.post('/login', asyncHandler(accessController.login));
@@ -222,5 +261,6 @@ router.post(
 router.use(authenticationV2);
 router.post('/logout', asyncHandler(accessController.logout));
 router.post('/refresh-token', asyncHandler(accessController.refreshToken));
+router.post('/change-password', asyncHandler(accessController.changePassword));
 
 module.exports = router;

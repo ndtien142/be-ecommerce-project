@@ -354,6 +354,21 @@ class AccessService {
             user: { userId, username, role, email },
         };
     };
+
+    static changePassword = async ({ userId, oldPassword, newPassword }) => {
+        const user = await database.User.findByPk(userId);
+        if (!user) {
+            throw new NotFoundError('User not found');
+        }
+        const match = await bcrypt.compare(oldPassword, user.user_pass);
+        if (!match) {
+            throw new BadRequestError('Old password is incorrect');
+        }
+        const newHash = await bcrypt.hash(newPassword, 10);
+        user.user_pass = newHash;
+        await user.save();
+        return { message: 'Password changed successfully' };
+    };
 }
 
 module.exports = AccessService;
