@@ -3,6 +3,7 @@
 const express = require('express');
 const { asyncHandler } = require('../../helpers/asyncHandler');
 const productController = require('../../controllers/product.controller');
+const { authenticationV2 } = require('../../auth/authUtils');
 const router = express.Router();
 
 /**
@@ -415,10 +416,13 @@ const router = express.Router();
  */
 
 // Product routes
-router.post('', asyncHandler(productController.createProduct));
 router.get('', asyncHandler(productController.getAllProducts));
 router.get('/:id', asyncHandler(productController.getProductById));
 router.get('/slug/:slug', asyncHandler(productController.getProductBySlug));
+
+router.use(authenticationV2);
+
+router.post('', asyncHandler(productController.createProduct));
 router.put('/:id', asyncHandler(productController.updateProduct));
 router.delete('/:id', asyncHandler(productController.deleteProduct));
 

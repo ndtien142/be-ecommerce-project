@@ -3,6 +3,7 @@
 const express = require('express');
 const { asyncHandler } = require('../../helpers/asyncHandler');
 const categoriesController = require('../../controllers/categories.controller');
+const { authenticationV2 } = require('../../auth/authUtils');
 const router = express.Router();
 
 /**
@@ -336,11 +337,14 @@ const router = express.Router();
  */
 
 // Category routes
-router.post('', asyncHandler(categoriesController.createCategory));
-router.get('', asyncHandler(categoriesController.getAllCategories));
 router.get('/tree', asyncHandler(categoriesController.getCategoryTree));
-router.put('/reorder', asyncHandler(categoriesController.reorderCategory));
 router.get('/:id', asyncHandler(categoriesController.getCategoryById));
+router.get('', asyncHandler(categoriesController.getAllCategories));
+
+router.use(authenticationV2);
+
+router.post('', asyncHandler(categoriesController.createCategory));
+router.put('/reorder', asyncHandler(categoriesController.reorderCategory));
 router.put('/:id', asyncHandler(categoriesController.updateCategory));
 router.delete('/:id', asyncHandler(categoriesController.deleteCategory));
 router.put(
