@@ -362,6 +362,16 @@ database.UserAddress.belongsTo(database.User, {
     as: 'user',
 });
 
+// Order & Address (N-1)
+database.Order.belongsTo(database.UserAddress, {
+    foreignKey: 'address_id',
+    as: 'address',
+});
+database.UserAddress.hasMany(database.Order, {
+    foreignKey: 'address_id',
+    as: 'orders',
+});
+
 // // Product & Promotion (Many-to-Many)
 // database.Product.belongsToMany(database.Promotion, {
 //     through: 'product_promotions',

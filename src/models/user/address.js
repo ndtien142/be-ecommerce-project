@@ -58,6 +58,11 @@ function model(sequelize) {
             allowNull: false,
             defaultValue: false,
         },
+        status: {
+            type: DataTypes.ENUM('active', 'inactive', 'archived'),
+            allowNull: false,
+            defaultValue: 'active',
+        },
     };
 
     const options = {
