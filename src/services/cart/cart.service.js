@@ -2,6 +2,7 @@
 
 const { BadRequestError, NotFoundError } = require('../../core/error.response');
 const database = require('../../models');
+const { toCamel } = require('../../utils/common.utils'); // <-- add this import
 
 class CartService {
     static async createCart({
@@ -57,31 +58,47 @@ class CartService {
 
     static async getCartById(id) {
         const cart = await database.Cart.findByPk(id, {
-            include: [{ model: database.CartLineItem, as: 'lineItems' }],
+            include: [
+                {
+                    model: database.CartLineItem,
+                    as: 'lineItems',
+                    include: [
+                        {
+                            model: database.Product,
+                            as: 'product',
+                        },
+                    ],
+                },
+            ],
         });
         if (!cart) throw new NotFoundError('Cart not found');
-        return cart.toJSON();
+        return toCamel(cart.toJSON());
     }
 
-    static async getCartsByUserId(userId, { page = 1, limit = 20 } = {}) {
-        limit = Number(limit) || 20;
-        page = Number(page) || 1;
-        const offset = (page - 1) * limit;
-        const carts = await database.Cart.findAndCountAll({
-            where: { user_id: userId },
-            limit,
-            offset,
-            include: [{ model: database.CartLineItem, as: 'lineItems' }],
+    static async getCartsByUserId(userId) {
+        // Only return the active cart for the user
+        console.log(`Fetching active cart for userId: ${userId}`);
+        if (!userId) throw new BadRequestError('userId is required');
+
+        const cart = await database.Cart.findOne({
+            where: { user_id: userId, status: 'active' },
+            include: [
+                {
+                    model: database.CartLineItem,
+                    as: 'lineItems',
+                    include: [
+                        {
+                            model: database.Product,
+                            as: 'product',
+                        },
+                    ],
+                },
+            ],
         });
-        return {
-            items: carts.rows.map((c) => c.toJSON()),
-            meta: {
-                currentPage: page,
-                itemPerPage: limit,
-                totalItems: carts.count,
-                totalPages: Math.ceil(carts.count / limit),
-            },
-        };
+
+        console.log(`Found cart: ${JSON.stringify(cart)}`);
+
+        return cart ? toCamel(cart.toJSON()) : null;
     }
 
     static async updateCart(id, updateData) {

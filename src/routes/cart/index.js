@@ -32,8 +32,6 @@ const router = express.Router();
  *   post:
  *     summary: Create a new cart
  *     tags: [Cart]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
@@ -74,8 +72,6 @@ const router = express.Router();
  *   get:
  *     summary: Get cart by ID
  *     tags: [Cart]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/UserIdHeader'
  *       - in: path
@@ -97,8 +93,6 @@ const router = express.Router();
  *   get:
  *     summary: Get carts by authenticated user
  *     tags: [Cart]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/UserIdHeader'
  *       - in: query
@@ -122,8 +116,6 @@ const router = express.Router();
  *   put:
  *     summary: Update cart by ID
  *     tags: [Cart]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/UserIdHeader'
  *       - in: path
@@ -169,8 +161,6 @@ const router = express.Router();
  *   delete:
  *     summary: Delete cart by ID (set status to inactive)
  *     tags: [Cart]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/UserIdHeader'
  *       - in: path
@@ -189,11 +179,9 @@ const router = express.Router();
 /**
  * @swagger
  * /cart/add:
- *   post:
+ *   patch:
  *     summary: Add item to cart (create or update cart)
  *     tags: [Cart]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
@@ -221,11 +209,9 @@ const router = express.Router();
 /**
  * @swagger
  * /cart/minus:
- *   post:
+ *   patch:
  *     summary: Minus quantity of item in cart
  *     tags: [Cart]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
@@ -250,11 +236,9 @@ const router = express.Router();
 /**
  * @swagger
  * /cart/plus:
- *   post:
+ *   patch:
  *     summary: Plus quantity of item in cart
  *     tags: [Cart]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
@@ -279,11 +263,9 @@ const router = express.Router();
 /**
  * @swagger
  * /cart/remove:
- *   post:
+ *   patch:
  *     summary: Remove item from cart
  *     tags: [Cart]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
@@ -305,15 +287,15 @@ const router = express.Router();
 router.use(authenticationV2);
 
 router.post('/', asyncHandler(cartController.createCart));
-router.get('/:id', asyncHandler(cartController.getCartById));
+// router.get('/:id', asyncHandler(cartController.getCartById));
 router.get('/user', asyncHandler(cartController.getCartsByUserId));
 router.put('/:id', asyncHandler(cartController.updateCart));
 router.delete('/:id', asyncHandler(cartController.deleteCart));
 
 // Cart item operations
-router.post('/add', asyncHandler(cartController.addToCart));
-router.post('/minus', asyncHandler(cartController.minusItemQuantity));
-router.post('/plus', asyncHandler(cartController.plusItemQuantity));
-router.post('/remove', asyncHandler(cartController.removeItemFromCart));
+router.patch('/add', asyncHandler(cartController.addToCart));
+router.patch('/minus', asyncHandler(cartController.minusItemQuantity));
+router.patch('/plus', asyncHandler(cartController.plusItemQuantity));
+router.patch('/remove', asyncHandler(cartController.removeItemFromCart));
 
 module.exports = router;

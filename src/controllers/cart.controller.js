@@ -20,10 +20,9 @@ class CartController {
     };
 
     getCartsByUserId = async (req, res, next) => {
-        // Use userId from authenticationV2
         const userId = req.user.userId;
         new SuccessResponse({
-            metadata: await CartService.getCartsByUserId(userId, req.query),
+            metadata: await CartService.getCartsByUserId(userId),
         }).send(res);
     };
 
