@@ -345,6 +345,18 @@ class CartService {
             throw err;
         }
     }
+
+    static async countCartItems(userId) {
+        if (!userId) throw new BadRequestError('userId is required');
+        const cart = await database.Cart.findOne({
+            where: { user_id: userId, status: 'active' },
+        });
+        if (!cart) return 0;
+        const count = await database.CartLineItem.sum('quantity', {
+            where: { cart_id: cart.id },
+        });
+        return count || 0;
+    }
 }
 
 module.exports = CartService;

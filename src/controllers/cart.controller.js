@@ -80,6 +80,14 @@ class CartController {
             }),
         }).send(res);
     };
+
+    countCartItems = async (req, res, next) => {
+        const userId = req.user.userId;
+        new SuccessResponse({
+            message: 'Cart item count',
+            metadata: await CartService.countCartItems(userId),
+        }).send(res);
+    };
 }
 
 module.exports = new CartController();

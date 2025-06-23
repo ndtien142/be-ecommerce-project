@@ -284,11 +284,36 @@ const router = express.Router();
  *         description: Item removed from cart
  */
 
+/**
+ * @swagger
+ * /cart/count:
+ *   get:
+ *     summary: Get total quantity of all items in the current user's cart
+ *     tags: [Cart]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/UserIdHeader'
+ *     responses:
+ *       200:
+ *         description: Total item count in cart
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 metadata:
+ *                   type: integer
+ */
+
 router.use(authenticationV2);
 
 router.post('/', asyncHandler(cartController.createCart));
 // router.get('/:id', asyncHandler(cartController.getCartById));
 router.get('/user', asyncHandler(cartController.getCartsByUserId));
+router.get('/count', asyncHandler(cartController.countCartItems));
 router.put('/:id', asyncHandler(cartController.updateCart));
 router.delete('/:id', asyncHandler(cartController.deleteCart));
 
