@@ -24,14 +24,15 @@ module.exports = (sequelize) => {
         },
         status: {
             type: DataTypes.ENUM(
-                'pending',
-                'paid',
-                'shipped',
-                'completed',
-                'cancelled',
+                'pending_confirmation', // Chờ xác nhận
+                'pending_pickup', // Chờ lấy hàng
+                'shipping', // Chờ giao hàng
+                'delivered', // Đã giao
+                'returned', // Trả hàng
+                'cancelled', // Đã hủy
             ),
             allowNull: false,
-            defaultValue: 'pending',
+            defaultValue: 'pending_confirmation',
         },
         total_amount: {
             type: DataTypes.DECIMAL(12, 2),

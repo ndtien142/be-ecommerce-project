@@ -296,7 +296,7 @@ database.OrderLineItem.belongsTo(database.Order, {
     as: 'order',
 });
 
-// Order & SKU (Many-to-Many through OrderLineItem)
+// Order & Product (Many-to-Many through OrderLineItem)
 database.Order.belongsToMany(database.Product, {
     through: database.OrderLineItem,
     foreignKey: 'order_id',
@@ -308,6 +308,16 @@ database.Product.belongsToMany(database.Order, {
     foreignKey: 'product_id',
     otherKey: 'order_id',
     as: 'orders',
+});
+
+// OrderLineItem & Product
+database.OrderLineItem.belongsTo(database.Product, {
+    foreignKey: 'product_id',
+    as: 'product',
+});
+database.Product.hasMany(database.OrderLineItem, {
+    foreignKey: 'product_id',
+    as: 'orderLineItems',
 });
 
 // Cart & User
