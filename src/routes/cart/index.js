@@ -290,8 +290,6 @@ const router = express.Router();
  *   get:
  *     summary: Get total quantity of all items in the current user's cart
  *     tags: [Cart]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/UserIdHeader'
  *     responses:

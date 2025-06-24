@@ -11,5 +11,6 @@ router.use('/v1/api/product', require('./product'));
 router.use('/v1/api/brand', require('./brand'));
 router.use('/v1/api/categories', require('./categories'));
 router.use('/v1/api/cart', require('./cart'));
+router.use('/v1/api/address', require('./address'));
 
 module.exports = router;
