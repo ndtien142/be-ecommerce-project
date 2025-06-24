@@ -51,6 +51,14 @@ class OrderController {
             ),
         }).send(res);
     };
+
+    countOrdersByStatus = async (req, res, next) => {
+        const userId = req.user?.userId || req.headers['x-user-id'];
+        new SuccessResponse({
+            message: 'Order status count',
+            metadata: await OrderService.countOrdersByStatus(userId),
+        }).send(res);
+    };
 }
 
 module.exports = new OrderController();

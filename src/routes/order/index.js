@@ -19,8 +19,6 @@ const router = express.Router();
  *   post:
  *     summary: Create a new order
  *     tags: [Order]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: header
  *         name: x-user-id
@@ -70,8 +68,6 @@ const router = express.Router();
  *   get:
  *     summary: Get order by ID
  *     tags: [Order]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: header
  *         name: x-user-id
@@ -98,8 +94,6 @@ const router = express.Router();
  *   get:
  *     summary: Get orders by authenticated user
  *     tags: [Order]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: header
  *         name: x-user-id
@@ -117,6 +111,24 @@ const router = express.Router();
  *         schema:
  *           type: integer
  *         description: Items per page
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending_confirmation, pending_pickup, shipping, delivered, returned, cancelled]
+ *         description: Filter by order status
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Filter orders from this date (ordered_date >=)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Filter orders up to this date (ordered_date <=)
  *     responses:
  *       200:
  *         description: List of orders
@@ -128,8 +140,6 @@ const router = express.Router();
  *   patch:
  *     summary: Update order status
  *     tags: [Order]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -162,8 +172,6 @@ const router = express.Router();
  *   patch:
  *     summary: Cancel order
  *     tags: [Order]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -184,8 +192,6 @@ const router = express.Router();
  *   patch:
  *     summary: Update order address (if not shipping)
  *     tags: [Order]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -211,10 +217,49 @@ const router = express.Router();
  *         description: Order not found
  */
 
+/**
+ * @swagger
+ * /order/user/count-by-status:
+ *   get:
+ *     summary: Get count of orders by each status for authenticated user
+ *     tags: [Order]
+ *     parameters:
+ *       - in: header
+ *         name: x-user-id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: Count of orders by status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 pending_confirmation:
+ *                   type: integer
+ *                 pending_pickup:
+ *                   type: integer
+ *                 shipping:
+ *                   type: integer
+ *                 delivered:
+ *                   type: integer
+ *                 returned:
+ *                   type: integer
+ *                 cancelled:
+ *                   type: integer
+ */
+
 router.use(authenticationV2);
 
 router.post('/', asyncHandler(orderController.createOrder));
 router.get('/user', asyncHandler(orderController.getOrdersByUser));
+router.get(
+    '/user/count-by-status',
+    asyncHandler(orderController.countOrdersByStatus),
+);
 router.get('/:id', asyncHandler(orderController.getOrderById));
 router.patch('/:id/status', asyncHandler(orderController.updateOrderStatus));
 router.patch('/:id/cancel', asyncHandler(orderController.cancelOrder));
