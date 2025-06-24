@@ -44,7 +44,6 @@ const Category = require('./categories/categories')(sequelize);
 // Import order and payment models
 const Order = require('./order/order')(sequelize);
 const OrderLineItem = require('./order/orderLineItem')(sequelize);
-const PaymentMethod = require('./payment/paymentMethod')(sequelize);
 
 // Import cart models
 const Cart = require('./cart/cart')(sequelize);
@@ -59,6 +58,16 @@ const Supplier = require('./import-receipt/supplier')(sequelize);
 
 // Import address model
 const UserAddress = require('./user/address')(sequelize);
+
+// Import payment models
+const Payment = require('./payment/payment')(sequelize);
+const PaymentMethod = require('./payment/paymentMethod')(sequelize);
+const CustomerPaymentOption = require('./payment/customerPaymentOptions')(
+    sequelize,
+);
+
+// Import shipping models
+const shippingMethod = require('./order/shippingMethods')(sequelize);
 
 // Import promotion model
 // const Promotion = require('./promotions/promotions')(sequelize);
@@ -85,7 +94,6 @@ database.Category = Category;
 // Order and Payment models
 database.Order = Order;
 database.OrderLineItem = OrderLineItem;
-database.PaymentMethod = PaymentMethod;
 
 // Cart models
 database.Cart = Cart;
@@ -98,6 +106,14 @@ database.Supplier = Supplier;
 
 // Address model
 database.UserAddress = UserAddress;
+
+// Payment models
+database.Payment = Payment;
+database.CustomerPaymentOption = CustomerPaymentOption;
+database.PaymentMethod = PaymentMethod;
+
+// Shipping models
+database.ShippingMethod = shippingMethod;
 
 // Promotion model
 // database.Promotion = Promotion;
@@ -221,12 +237,52 @@ database.User.hasMany(database.Order, {
 });
 
 // Order & PaymentMethod
-database.Order.belongsTo(database.PaymentMethod, {
+database.Order.belongsTo(database.Payment, {
     foreignKey: 'payment_id',
+    as: 'payment',
+});
+database.Payment.hasMany(database.Order, {
+    foreignKey: 'payment_id',
+    as: 'orders',
+});
+
+// PaymentMethod & CustomerPaymentOption
+database.PaymentMethod.hasMany(database.CustomerPaymentOption, {
+    foreignKey: 'payment_method_id',
+    as: 'customerPaymentOptions',
+});
+database.CustomerPaymentOption.belongsTo(database.PaymentMethod, {
+    foreignKey: 'payment_method_id',
     as: 'paymentMethod',
 });
-database.PaymentMethod.hasMany(database.Order, {
-    foreignKey: 'payment_id',
+
+// CustomerPaymentOption & User
+database.CustomerPaymentOption.belongsTo(database.User, {
+    foreignKey: 'user_id',
+    as: 'user',
+});
+database.User.hasMany(database.CustomerPaymentOption, {
+    foreignKey: 'user_id',
+    as: 'customerPaymentOptions',
+});
+
+// Payment & PaymentMethod
+database.Payment.belongsTo(database.PaymentMethod, {
+    foreignKey: 'payment_method_id',
+    as: 'paymentMethod',
+});
+database.PaymentMethod.hasMany(database.Payment, {
+    foreignKey: 'payment_method_id',
+    as: 'payments',
+});
+
+// Order & ShippingMethod
+database.Order.belongsTo(database.ShippingMethod, {
+    foreignKey: 'shipping_method_id',
+    as: 'shippingMethod',
+});
+database.ShippingMethod.hasMany(database.Order, {
+    foreignKey: 'shipping_method_id',
     as: 'orders',
 });
 
@@ -240,7 +296,7 @@ database.OrderLineItem.belongsTo(database.Order, {
     as: 'order',
 });
 
-// Order & SKU (Many-to-Many through OrderLineItem)
+// Order & Product (Many-to-Many through OrderLineItem)
 database.Order.belongsToMany(database.Product, {
     through: database.OrderLineItem,
     foreignKey: 'order_id',
@@ -252,6 +308,16 @@ database.Product.belongsToMany(database.Order, {
     foreignKey: 'product_id',
     otherKey: 'order_id',
     as: 'orders',
+});
+
+// OrderLineItem & Product
+database.OrderLineItem.belongsTo(database.Product, {
+    foreignKey: 'product_id',
+    as: 'product',
+});
+database.Product.hasMany(database.OrderLineItem, {
+    foreignKey: 'product_id',
+    as: 'orderLineItems',
 });
 
 // Cart & User
@@ -360,6 +426,16 @@ database.User.hasMany(database.UserAddress, {
 database.UserAddress.belongsTo(database.User, {
     foreignKey: 'user_id',
     as: 'user',
+});
+
+// Order & Address (N-1)
+database.Order.belongsTo(database.UserAddress, {
+    foreignKey: 'address_id',
+    as: 'address',
+});
+database.UserAddress.hasMany(database.Order, {
+    foreignKey: 'address_id',
+    as: 'orders',
 });
 
 // // Product & Promotion (Many-to-Many)
