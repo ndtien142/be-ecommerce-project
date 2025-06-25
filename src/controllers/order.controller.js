@@ -25,6 +25,12 @@ class OrderController {
         }).send(res);
     };
 
+    getOrdersByAdmin = async (req, res, next) => {
+        new SuccessResponse({
+            metadata: await OrderService.getOrdersByAdmin(req.query),
+        }).send(res);
+    };
+
     updateOrderStatus = async (req, res, next) => {
         new SuccessResponse({
             message: 'Order status updated successfully',
@@ -57,6 +63,23 @@ class OrderController {
         new SuccessResponse({
             message: 'Order status count',
             metadata: await OrderService.countOrdersByStatus(userId),
+        }).send(res);
+    };
+
+    getOrderByIdForUser = async (req, res, next) => {
+        const userId = req.user?.userId || req.headers['x-user-id'];
+        new SuccessResponse({
+            metadata: await OrderService.getOrderByIdForUser(
+                req.params.id,
+                userId,
+            ),
+        }).send(res);
+    };
+
+    countOrdersByStatusForAdmin = async (req, res, next) => {
+        new SuccessResponse({
+            message: 'Order status count for admin',
+            metadata: await OrderService.countOrdersByStatusForAdmin(),
         }).send(res);
     };
 }

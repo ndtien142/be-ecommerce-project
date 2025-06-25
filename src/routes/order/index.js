@@ -136,6 +136,32 @@ const router = express.Router();
 
 /**
  * @swagger
+ * /order/user/{id}:
+ *   get:
+ *     summary: Get order by ID for authenticated user
+ *     tags: [Order]
+ *     parameters:
+ *       - in: header
+ *         name: x-user-id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Order ID
+ *     responses:
+ *       200:
+ *         description: Order details for user
+ *       404:
+ *         description: Order not found
+ */
+
+/**
+ * @swagger
  * /order/{id}/status:
  *   patch:
  *     summary: Update order status
@@ -252,17 +278,60 @@ const router = express.Router();
  *                   type: integer
  */
 
+/**
+ * @swagger
+ * /order/admin/count-by-status:
+ *   get:
+ *     summary: Get count of orders by each status for admin (all users)
+ *     tags: [Order]
+ *     responses:
+ *       200:
+ *         description: Count of orders by status for admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 pending_confirmation:
+ *                   type: integer
+ *                 pending_pickup:
+ *                   type: integer
+ *                 shipping:
+ *                   type: integer
+ *                 delivered:
+ *                   type: integer
+ *                 returned:
+ *                   type: integer
+ *                 cancelled:
+ *                   type: integer
+ */
+
 router.use(authenticationV2);
 
+// User routes
 router.post('/', asyncHandler(orderController.createOrder));
 router.get('/user', asyncHandler(orderController.getOrdersByUser));
 router.get(
-    '/user/count-by-status',
+    '/user/analytics/count-by-status',
     asyncHandler(orderController.countOrdersByStatus),
 );
-router.get('/:id', asyncHandler(orderController.getOrderById));
-router.patch('/:id/status', asyncHandler(orderController.updateOrderStatus));
-router.patch('/:id/cancel', asyncHandler(orderController.cancelOrder));
-router.patch('/:id/address', asyncHandler(orderController.updateOrderAddress));
+router.get('/user/:id', asyncHandler(orderController.getOrderByIdForUser));
+
+// Admin routes
+router.get(
+    '/admin/count-by-status',
+    asyncHandler(orderController.countOrdersByStatusForAdmin),
+);
+router.get('/admin', asyncHandler(orderController.getOrdersByAdmin));
+router.get('/admin/:id', asyncHandler(orderController.getOrderById));
+router.patch(
+    '/admin/:id/status',
+    asyncHandler(orderController.updateOrderStatus),
+);
+router.patch('/admin/:id/cancel', asyncHandler(orderController.cancelOrder));
+router.patch(
+    '/user/:id/address',
+    asyncHandler(orderController.updateOrderAddress),
+);
 
 module.exports = router;
