@@ -103,6 +103,8 @@ class AccessService {
         password,
         roleName,
         email,
+        firstName,
+        lastName,
         dateOfBirth,
     }) => {
         // step 1: check username exist
@@ -134,6 +136,17 @@ class AccessService {
         });
 
         if (newAccount) {
+            // Create profile if firstName or lastName are provided
+            if (firstName || lastName) {
+                const fullName = [firstName, lastName]
+                    .filter(Boolean)
+                    .join(' ');
+                await database.Profile.create({
+                    user_id: newAccount.id,
+                    full_name: fullName,
+                });
+            }
+
             // created privateKey, publicKey
             // use has private key
             // system store public key
@@ -198,6 +211,8 @@ class AccessService {
         password,
         email,
         dateOfBirth,
+        firstName,
+        lastName,
     }) => {
         // step 1: check username exist
         const existingAccount = await getAccountByUserLogin(username);
@@ -221,6 +236,17 @@ class AccessService {
         });
 
         if (newAccount) {
+            // Create profile if firstName or lastName are provided
+            if (firstName || lastName) {
+                const fullName = [firstName, lastName]
+                    .filter(Boolean)
+                    .join(' ');
+                await database.Profile.create({
+                    user_id: newAccount.id,
+                    full_name: fullName,
+                });
+            }
+
             // created privateKey, publicKey
             // use has private key
             // system store public key
