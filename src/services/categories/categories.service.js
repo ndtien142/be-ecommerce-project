@@ -91,6 +91,9 @@ class CategoriesService {
         if (updateData.slug !== undefined) mappedData.slug = updateData.slug;
         if (updateData.parentId !== undefined)
             mappedData.parent_id = updateData.parentId;
+        if (updateData.parentId === 0) {
+            mappedData.parent_id = null;
+        }
         if (updateData.status !== undefined)
             mappedData.status = updateData.status;
         if (updateData.sortOrder !== undefined)
@@ -162,6 +165,9 @@ class CategoriesService {
     static async getCategoryTree() {
         const categories = await database.Category.findAll({
             order: [['sort_order', 'ASC']],
+            where: {
+                status: 'active',
+            },
             raw: true,
         });
 
