@@ -35,7 +35,7 @@ class AccessController {
     };
 
     changePassword = async (req, res, next) => {
-        const userId = req.user.userid;
+        const userId = req.user.userId;
         new SuccessResponse({
             message: 'Password changed successfully',
             metadata: await AccessService.changePassword({

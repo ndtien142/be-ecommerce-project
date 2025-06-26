@@ -15,12 +15,40 @@ module.exports = (sequelize) => {
             allowNull: true,
             unique: true,
         },
+        first_name: {
+            type: DataTypes.STRING(50),
+            allowNull: true,
+        },
+        last_name: {
+            type: DataTypes.STRING(50),
+            allowNull: true,
+        },
         full_name: {
             type: DataTypes.STRING(100),
             allowNull: true,
         },
         avatar_url: {
             type: DataTypes.STRING(255),
+            allowNull: true,
+        },
+        address: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+        },
+        province: {
+            type: DataTypes.STRING(100),
+            allowNull: true,
+        },
+        district: {
+            type: DataTypes.STRING(100),
+            allowNull: true,
+        },
+        ward: {
+            type: DataTypes.STRING(100),
+            allowNull: true,
+        },
+        postal_code: {
+            type: DataTypes.STRING(20),
             allowNull: true,
         },
         bio: {

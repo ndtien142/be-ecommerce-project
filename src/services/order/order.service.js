@@ -178,6 +178,7 @@ class OrderService {
     static async getOrderById(id) {
         const order = await database.Order.findByPk(id, {
             include: [
+                { model: database.User, as: 'user' },
                 {
                     model: database.OrderLineItem,
                     as: 'lineItems',
@@ -185,10 +186,46 @@ class OrderService {
                 },
                 { model: database.UserAddress, as: 'address' },
                 { model: database.ShippingMethod, as: 'shippingMethod' },
-                { model: database.Payment, as: 'paymentMethod' },
+                {
+                    model: database.Payment,
+                    as: 'payment',
+                    include: [
+                        { model: database.PaymentMethod, as: 'paymentMethod' },
+                    ],
+                },
             ],
         });
         if (!order) throw new NotFoundError('Order not found');
+        return toCamel(order.toJSON());
+    }
+
+    static async getOrderByIdForUser(orderId, userId) {
+        if (!userId) throw new BadRequestError('userId is required');
+        const order = await database.Order.findByPk(orderId, {
+            include: [
+                { model: database.User, as: 'user' },
+                {
+                    model: database.OrderLineItem,
+                    as: 'lineItems',
+                    include: [{ model: database.Product, as: 'product' }],
+                },
+                { model: database.UserAddress, as: 'address' },
+                { model: database.ShippingMethod, as: 'shippingMethod' },
+                {
+                    model: database.Payment,
+                    as: 'payment',
+                    include: [
+                        { model: database.PaymentMethod, as: 'paymentMethod' },
+                    ],
+                },
+            ],
+        });
+        if (!order) throw new NotFoundError('Order not found');
+        if (order.user_id !== Number(userId)) {
+            throw new BadRequestError(
+                'You do not have permission to view this order',
+            );
+        }
         return toCamel(order.toJSON());
     }
 
@@ -200,6 +237,63 @@ class OrderService {
         page = Number(page) || 1;
         const offset = (page - 1) * limit;
         const where = { user_id: userId };
+        if (status) {
+            where.status = status;
+        }
+        if (startDate || endDate) {
+            where.ordered_date = {};
+            if (startDate) {
+                where.ordered_date['$gte'] = new Date(startDate);
+            }
+            if (endDate) {
+                where.ordered_date['$lte'] = new Date(endDate);
+            }
+        }
+        const orders = await database.Order.findAndCountAll({
+            where,
+            limit,
+            offset,
+            order: [['create_time', 'DESC']],
+            include: [
+                { model: database.User, as: 'user' },
+                {
+                    model: database.OrderLineItem,
+                    as: 'lineItems',
+                    include: [{ model: database.Product, as: 'product' }],
+                },
+                { model: database.UserAddress, as: 'address' },
+                { model: database.ShippingMethod, as: 'shippingMethod' },
+                {
+                    model: database.Payment,
+                    as: 'payment',
+                    include: [
+                        { model: database.PaymentMethod, as: 'paymentMethod' },
+                    ],
+                },
+            ],
+        });
+        return {
+            items: orders.rows.map((o) => toCamel(o.toJSON())),
+            meta: {
+                currentPage: page,
+                itemPerPage: limit,
+                totalItems: orders.count,
+                totalPages: Math.ceil(orders.count / limit),
+            },
+        };
+    }
+
+    static async getOrdersByAdmin({
+        page = 1,
+        limit = 20,
+        status,
+        startDate,
+        endDate,
+    } = {}) {
+        limit = Number(limit) || 20;
+        page = Number(page) || 1;
+        const offset = (page - 1) * limit;
+        const where = {};
         if (status) {
             where.status = status;
         }
@@ -291,6 +385,23 @@ class OrderService {
         for (const status of statuses) {
             result[status] = await database.Order.count({
                 where: { user_id: userId, status },
+            });
+        }
+        return toCamel(result);
+    }
+    static async countOrdersByStatusForAdmin() {
+        const statuses = [
+            'pending_confirmation',
+            'pending_pickup',
+            'shipping',
+            'delivered',
+            'returned',
+            'cancelled',
+        ];
+        const result = {};
+        for (const status of statuses) {
+            result[status] = await database.Order.count({
+                where: { status },
             });
         }
         return toCamel(result);

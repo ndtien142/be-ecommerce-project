@@ -262,6 +262,6 @@ router.use(authenticationV2);
 
 router.post('/logout', asyncHandler(accessController.logout));
 router.post('/refresh-token', asyncHandler(accessController.refreshToken));
-router.post('/change-password', asyncHandler(accessController.changePassword));
+router.put('/change-password', asyncHandler(accessController.changePassword));
 
 module.exports = router;
