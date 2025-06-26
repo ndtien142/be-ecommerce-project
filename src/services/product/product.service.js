@@ -447,6 +447,9 @@ class ProductService {
         if (updateData.productType !== undefined)
             mappedData.product_type = updateData.productType;
         if (updateData.flag !== undefined) mappedData.flag = updateData.flag;
+
+        // Note: images are handled separately after the main product update
+
         const [affectedRows] = await database.Product.update(mappedData, {
             where: { id },
         });
@@ -470,6 +473,62 @@ class ProductService {
                 await product.setTags(updateData.tags);
             }
         }
+
+        // Optionally update images
+        if (Array.isArray(updateData.images) && database.ProductImage) {
+            // Validate each image URL
+            for (const img of updateData.images) {
+                if (typeof img !== 'string' || !img.trim()) {
+                    throw new BadRequestError(
+                        'Each image must be a non-empty string URL',
+                    );
+                }
+            }
+
+            // Start transaction for image updates
+            const transaction = await database.sequelize.transaction();
+            try {
+                // Remove all existing images for this product
+                await database.ProductImage.destroy({
+                    where: { product_id: id },
+                    transaction,
+                });
+
+                // Create new image records if any images provided
+                if (updateData.images.length > 0) {
+                    const imageRecords = updateData.images.map(
+                        (imgUrl, idx) => ({
+                            product_id: id,
+                            image_url: imgUrl,
+                            is_primary: idx === 0, // First image is primary
+                            sort_order: idx,
+                        }),
+                    );
+
+                    await database.ProductImage.bulkCreate(imageRecords, {
+                        transaction,
+                    });
+
+                    // Update product thumbnail to first image
+                    await database.Product.update(
+                        { thumbnail: updateData.images[0] },
+                        { where: { id }, transaction },
+                    );
+                } else {
+                    // If no images provided, clear thumbnail
+                    await database.Product.update(
+                        { thumbnail: null },
+                        { where: { id }, transaction },
+                    );
+                }
+
+                await transaction.commit();
+            } catch (err) {
+                await transaction.rollback();
+                throw err;
+            }
+        }
+
         return await ProductService.getProductById(id);
     }
 

@@ -62,6 +62,7 @@ class AccountService {
         const accountData = {
             user_nickname: nickname,
             user_date_of_birth: dateOfBirth,
+            user_url: avatarUrl,
         };
 
         // Remove undefined or null fields
