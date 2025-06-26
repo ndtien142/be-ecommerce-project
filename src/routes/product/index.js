@@ -290,32 +290,122 @@ const router = express.Router();
  * @swagger
  * /product:
  *   get:
- *     summary: Get all products
+ *     summary: Get all products with optional filters
  *     tags: [Product]
  *     parameters:
  *       - $ref: '#/components/parameters/userId'
  *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number for pagination
+ *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
+ *           default: 20
+ *         description: Number of items per page
  *       - in: query
- *         name: offset
+ *         name: categorySlug
+ *         schema:
+ *           type: string
+ *         description: Filter by category slug (includes child categories)
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [active, inactive, archived, draft]
+ *           default: active
+ *         description: Filter by product status
+ *       - in: query
+ *         name: brandId
  *         schema:
  *           type: integer
+ *         description: Filter by brand ID
+ *       - in: query
+ *         name: minPrice
+ *         schema:
+ *           type: number
+ *         description: Minimum price filter
+ *       - in: query
+ *         name: maxPrice
+ *         schema:
+ *           type: number
+ *         description: Maximum price filter
+ *       - in: query
+ *         name: flag
+ *         schema:
+ *           type: string
+ *           enum: [new, popular, featured, none, on_sale]
+ *         description: Filter by product flag
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search in product name and description
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           default: create_time
+ *         description: Field to sort by
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [ASC, DESC]
+ *           default: DESC
+ *         description: Sort order
  *     responses:
  *       200:
- *         description: List of products
+ *         description: List of products with filters applied
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 count:
- *                   type: integer
- *                 rows:
+ *                 items:
  *                   type: array
  *                   items:
  *                     $ref: '#/components/schemas/Product'
+ *                 category:
+ *                   type: object
+ *                   description: Category information (when filtered by category)
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     name:
+ *                       type: string
+ *                     description:
+ *                       type: string
+ *                     slug:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                     sortOrder:
+ *                       type: integer
+ *                     imageUrl:
+ *                       type: string
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     currentPage:
+ *                       type: integer
+ *                     itemPerPage:
+ *                       type: integer
+ *                     totalItems:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ *                     filters:
+ *                       type: object
+ *                       description: Applied filters for reference
+ *                     includedCategoryIds:
+ *                       type: array
+ *                       items:
+ *                         type: integer
+ *                       description: Category IDs included in filter (when filtering by category)
  */
 
 /**
@@ -417,8 +507,8 @@ const router = express.Router();
 
 // Product routes
 router.get('', asyncHandler(productController.getAllProducts));
-router.get('/:id', asyncHandler(productController.getProductById));
 router.get('/slug/:slug', asyncHandler(productController.getProductBySlug));
+router.get('/:id', asyncHandler(productController.getProductById));
 
 router.use(authenticationV2);
 

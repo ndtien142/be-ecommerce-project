@@ -211,11 +211,63 @@ class ProductService {
         return toCamel(product.toJSON());
     }
 
-    static async getAllProducts({ page = 1, limit = 20 } = {}) {
+    static async getAllProducts({
+        page = 1,
+        limit = 20,
+        categorySlug = null,
+        status = 'active',
+        brandId = null,
+        minPrice = null,
+        maxPrice = null,
+        flag = null,
+        search = null,
+        sortBy = 'create_time',
+        sortOrder = 'DESC',
+    } = {}) {
+        // Validate and convert parameters
         limit = Number(limit) || 20;
         page = Number(page) || 1;
         const offset = (page - 1) * limit;
-        const products = await database.Product.findAndCountAll({
+
+        // Valid sortable columns for Product model
+        const validSortColumns = [
+            'id',
+            'name',
+            'description',
+            'product_type',
+            'thumbnail',
+            'slug',
+            'status',
+            'brand_id',
+            'price',
+            'flag',
+            'stock',
+            'min_stock',
+            'weight',
+            'width',
+            'height',
+            'length',
+            'price_sale',
+            'sold',
+            'inventory_type',
+            'create_time',
+            'update_time',
+        ];
+
+        // Validate sortBy parameter
+        if (!validSortColumns.includes(sortBy)) {
+            // Default to create_time if invalid sortBy is provided
+            sortBy = 'create_time';
+        }
+
+        // Validate sortOrder parameter
+        const validSortOrders = ['ASC', 'DESC'];
+        if (!validSortOrders.includes(sortOrder.toUpperCase())) {
+            sortOrder = 'DESC';
+        }
+
+        // Build the base query
+        const queryOptions = {
             limit,
             offset,
             include: [
@@ -225,18 +277,142 @@ class ProductService {
                 { model: database.ProductMeta, as: 'meta' },
                 { model: database.Tag, as: 'tags' },
             ],
-        });
+            where: {},
+            order: [[sortBy, sortOrder.toUpperCase()]],
+        };
+
+        // Add status filter if provided
+        if (status) {
+            queryOptions.where.status = status;
+        }
+
+        // Add brand filter
+        if (brandId && !isNaN(Number(brandId))) {
+            queryOptions.where.brand_id = Number(brandId);
+        }
+
+        // Add price range filter
+        if (minPrice && !isNaN(Number(minPrice))) {
+            queryOptions.where.price = queryOptions.where.price || {};
+            queryOptions.where.price[database.Sequelize.Op.gte] =
+                Number(minPrice);
+        }
+        if (maxPrice && !isNaN(Number(maxPrice))) {
+            queryOptions.where.price = queryOptions.where.price || {};
+            queryOptions.where.price[database.Sequelize.Op.lte] =
+                Number(maxPrice);
+        }
+
+        // Add flag filter
+        if (flag) {
+            queryOptions.where.flag = flag;
+        }
+
+        // Add search filter (name and description)
+        if (search && typeof search === 'string') {
+            queryOptions.where[database.Sequelize.Op.or] = [
+                {
+                    name: {
+                        [database.Sequelize.Op.like]: `%${search}%`,
+                    },
+                },
+                {
+                    description: {
+                        [database.Sequelize.Op.like]: `%${search}%`,
+                    },
+                },
+            ];
+        }
+
+        let selectedCategory = null;
+        let allCategoryIds = [];
+
+        // If category filter is provided, handle category filtering
+        if (categorySlug && typeof categorySlug === 'string') {
+            // Find the category by slug
+            selectedCategory = await database.Category.findOne({
+                where: { slug: categorySlug, status: 'active' },
+            });
+
+            if (!selectedCategory) {
+                throw new NotFoundError('Category not found');
+            }
+
+            // Helper function to get all child category IDs recursively
+            const getAllChildCategoryIds = async (parentId) => {
+                const children = await database.Category.findAll({
+                    where: { parent_id: parentId, status: 'active' },
+                    attributes: ['id'],
+                });
+
+                let allIds = children.map((child) => child.id);
+
+                // Recursively get children of children
+                for (const child of children) {
+                    const grandChildren = await getAllChildCategoryIds(
+                        child.id,
+                    );
+                    allIds = allIds.concat(grandChildren);
+                }
+
+                return allIds;
+            };
+
+            // Get all child category IDs
+            const childCategoryIds = await getAllChildCategoryIds(
+                selectedCategory.id,
+            );
+
+            // Include the parent category ID and all child category IDs
+            allCategoryIds = [selectedCategory.id, ...childCategoryIds];
+
+            // Add category filter to the include
+            queryOptions.include = queryOptions.include.map((inc) => {
+                if (inc.as === 'categories') {
+                    return {
+                        ...inc,
+                        where: {
+                            id: { [database.Sequelize.Op.in]: allCategoryIds },
+                        },
+                        through: { attributes: [] },
+                    };
+                }
+                return inc;
+            });
+        }
+
+        const products = await database.Product.findAndCountAll(queryOptions);
         const totalItems = products.count;
         const totalPages = Math.ceil(totalItems / limit);
-        return {
+
+        const response = {
             items: products.rows.map((p) => toCamel(p.toJSON())),
             meta: {
                 currentPage: page,
                 itemPerPage: limit,
                 totalItems,
                 totalPages,
+                filters: {
+                    categorySlug,
+                    status,
+                    brandId,
+                    minPrice,
+                    maxPrice,
+                    flag,
+                    search,
+                    sortBy,
+                    sortOrder,
+                },
             },
         };
+
+        // Add category info if filtering by category
+        if (selectedCategory) {
+            response.category = toCamel(selectedCategory.toJSON());
+            response.meta.includedCategoryIds = allCategoryIds;
+        }
+
+        return response;
     }
 
     static async updateProduct(id, updateData) {
