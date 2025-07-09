@@ -1,4 +1,4 @@
-'user strict';
+'use strict';
 
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
@@ -20,6 +20,7 @@ const {
     removeKeyTokenByUserId,
 } = require('../../models/repo/keyToken.repo');
 const database = require('../../models');
+const emailService = require('../email/email.service');
 
 class AccessService {
     static logout = async ({ userId }) => {
@@ -46,6 +47,13 @@ class AccessService {
             foundAccount.user_pass,
         );
         if (!matchPassword) throw new AuthFailureError('Authentication Error');
+
+        // Check if email is verified
+        if (!foundAccount.email_verified) {
+            throw new AuthFailureError(
+                'Please verify your email address before logging in',
+            );
+        }
 
         // if (foundAccount.is_block || !foundAccount.is_active)
         //     throw new AuthFailureError('Account has something wrong');
@@ -110,7 +118,7 @@ class AccessService {
         // step 1: check username exist
         const existingAccount = await getAccountByUserLogin(username);
         if (existingAccount) {
-            throw new BadRequestError('Error: Username already registered!');
+            throw new BadRequestError('Lỗi: Tên đăng nhập đã được đăng ký!');
         }
         // Step 2: hashing password
         const passwordHash = await bcrypt.hash(password, 10);
@@ -119,20 +127,27 @@ class AccessService {
         if (roleName) {
             role = await getRoleByName(roleName);
             if (!role) {
-                throw new BadRequestError('Role not found');
+                throw new BadRequestError('Không tìm thấy vai trò');
             }
         } else {
             role = await getRoleByName(roleName);
             if (!role) {
-                throw new BadRequestError('Default role not found');
+                throw new BadRequestError('Không tìm thấy vai trò mặc định');
             }
         }
+
+        // Generate email verification code
+        const verificationCode = emailService.generateVerificationCode();
+        const verificationExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes for testing
+
         const newAccount = await createAccount({
             username,
             password: passwordHash,
             roleId: role.id,
             email,
             dateOfBirth,
+            emailVerificationCode: verificationCode,
+            emailVerificationExpires: verificationExpires,
         });
 
         if (newAccount) {
@@ -179,30 +194,40 @@ class AccessService {
                 throw new BadRequestError('Public key string error');
             }
 
-            const publicKeyObject = crypto.createPublicKey(publicKeyString);
-            // create token pair
-            const tokens = await createTokenPair(
-                { userId: newAccount.id, username: newAccount.user_login },
-                publicKeyObject,
-                privateKey,
+            // Send verification email
+            const emailResult = await emailService.sendVerificationEmail(
+                newAccount.user_email,
+                newAccount.user_login,
+                verificationCode,
             );
+
+            if (!emailResult.success) {
+                console.error(
+                    'Failed to send verification email:',
+                    emailResult.error,
+                );
+            }
+
+            // Note: Don't create tokens for unverified users
+            // They need to verify email first before they can login
 
             return {
                 code: 201,
+                message:
+                    'Account created successfully. Please check your email for a 6-digit verification code.',
                 user: {
                     userId: newAccount.id,
                     username: newAccount.user_login,
                     email: newAccount.user_email,
                     role: newAccount.role ? newAccount.role.name : undefined,
-                    isActive: newAccount.is_active,
-                    isBlock: newAccount.is_block,
+                    emailVerified: false,
                 },
-                tokens: tokens,
+                emailSent: emailResult.success,
+                previewUrl: emailResult.previewUrl, // For development
             };
         }
         return {
             code: 201,
-            metadata: null,
         };
     };
 
@@ -210,22 +235,26 @@ class AccessService {
         username,
         password,
         email,
-        dateOfBirth,
         firstName,
         lastName,
+        dateOfBirth,
     }) => {
         // step 1: check username exist
         const existingAccount = await getAccountByUserLogin(username);
         if (existingAccount) {
-            throw new BadRequestError('Error: Username already registered!');
+            throw new BadRequestError('Lỗi: Tên đăng nhập đã được đăng ký!');
         }
         // Step 2: hashing password
         const passwordHash = await bcrypt.hash(password, 10);
 
         const role = await getRoleByName('customer');
         if (!role) {
-            throw new BadRequestError('Role not found');
+            throw new BadRequestError('Không tìm thấy vai trò');
         }
+
+        // Generate email verification code
+        const verificationCode = emailService.generateVerificationCode();
+        const verificationExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes for testing
 
         const newAccount = await createAccount({
             username,
@@ -233,6 +262,8 @@ class AccessService {
             dateOfBirth,
             password: passwordHash,
             roleId: role.id,
+            emailVerificationCode: verificationCode,
+            emailVerificationExpires: verificationExpires,
         });
 
         if (newAccount) {
@@ -279,67 +310,115 @@ class AccessService {
                 throw new BadRequestError('Public key string error');
             }
 
-            const publicKeyObject = crypto.createPublicKey(publicKeyString);
-            // create token pair
-            const tokens = await createTokenPair(
-                { userId: newAccount.user_code, username },
-                publicKeyObject,
-                privateKey,
+            // Send verification email
+            const emailResult = await emailService.sendVerificationEmail(
+                newAccount.user_email,
+                newAccount.user_login,
+                verificationCode,
             );
+
+            if (!emailResult.success) {
+                console.error(
+                    'Failed to send verification email:',
+                    emailResult.error,
+                );
+            }
+
+            // Note: Don't create tokens for unverified customers
+            // They need to verify email first before they can login
 
             return {
                 code: 201,
+                message:
+                    'Customer account created successfully. Please check your email for a 6-digit verification code.',
                 user: {
                     userId: newAccount.id,
                     username: newAccount.user_login,
                     email: newAccount.user_email,
                     role: newAccount.role ? newAccount.role.name : undefined,
+                    emailVerified: false,
                 },
-                tokens: tokens,
+                emailSent: emailResult.success,
+                previewUrl: emailResult.previewUrl, // For development
             };
         }
         return {
             code: 201,
-            metadata: null,
         };
     };
 
-    static handlerRefreshToken = async ({ refreshToken }) => {
-        // 1 - check refresh token used in database
-        const isUsed = await database.RefreshTokenUsed.findOne({
-            where: { token: refreshToken },
-        });
-        if (isUsed) {
-            throw new ForbiddenError('Refresh token has been used before.');
+    /*
+        check token used
+    */
+    static handlerRefreshToken = async ({ refreshToken, keyStore, user }) => {
+        // check keystore refreshToken is null
+        const { userId, username, role, email } = user;
+
+        if (keyStore.refreshTokenUsed.includes(refreshToken)) {
+            await removeKeyTokenByUserId(userId);
+            throw new ForbiddenError('Something wrong happend! Pls relogin');
         }
 
-        // 2 - find key token for this refresh token
+        if (keyStore.refreshToken !== refreshToken)
+            throw new AuthFailureError('Shop not registed');
+
+        //     const foundShop = await findByEmail(email);
+        // console.log({foundShop});
+        // if(!foundShop) throw new AuthFailureError("Shop not registed");
+
+        // create 1 cap moi
+        const tokens = await createTokenPair(
+            { userId, username, role, email },
+            keyStore.publicKey,
+            keyStore.privateKey,
+        );
+
+        // update token
+        await keyStore.update({
+            $set: {
+                refreshToken: tokens.refreshToken,
+            },
+            $addToSet: {
+                refreshTokenUsed: refreshToken, // da duoc su dung de lay token moi
+            },
+        });
+        return {
+            user: { userId, username, role, email },
+            tokens,
+        };
+    };
+
+    static handlerRefreshTokenV2 = async ({ refreshToken }) => {
         const keyToken = await database.KeyToken.findOne({
             where: { refreshToken },
         });
 
         if (!keyToken) {
-            throw new NotFoundError(
-                'Key token not found or invalid refresh token.',
-            );
+            throw new NotFoundError('Refresh token not found');
         }
 
-        // 3 - Verify refresh token
         let decoded;
         try {
+            // 3 - Verify refresh token
             decoded = await verifyJWT(refreshToken, keyToken.publicKey);
         } catch (err) {
-            throw new ForbiddenError('Refresh token verification failed.');
+            throw new BadRequestError('Refresh token verification failed');
         }
+
         const { userId, username, role, email } = decoded;
 
-        // 4 - Save refresh token used
-        await database.RefreshTokenUsed.create({
-            token: refreshToken,
-            user_id: userId,
-        });
+        // 4 - check userId
+        const foundUser = await database.User.findByPk(userId);
+        if (!foundUser) {
+            throw new NotFoundError('User not found');
+        }
 
-        // 5 - Generate new token pair
+        // 5 - check keyToken exist in database
+        if (!keyToken) {
+            throw new NotFoundError('Key token not found');
+        }
+
+        // 6 - create new key pair for refresh
         const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
             modulusLength: 4096,
             publicKeyEncoding: {
@@ -352,21 +431,15 @@ class AccessService {
             },
         });
 
-        // 6 - Create new key token
+        // 7 - create new token pair
         const tokens = await createTokenPair(
             { userId, username, role, email },
             publicKey,
             privateKey,
         );
-        const newKeyToken = await createKeyToken({
-            userId,
-            refreshToken: tokens.refreshToken,
-            privateKey,
-            publicKey,
-        });
 
-        // 7 - Save new key token to database
-        if (!newKeyToken) {
+        // 8 - update keyToken
+        if (!keyToken) {
             throw new BadRequestError('Failed to create new key token.');
         }
         keyToken.refreshToken = tokens.refreshToken;
@@ -388,12 +461,112 @@ class AccessService {
         }
         const match = await bcrypt.compare(oldPassword, user.user_pass);
         if (!match) {
-            throw new BadRequestError('Old password is incorrect');
+            throw new BadRequestError('Mật khẩu cũ không chính xác');
         }
         const newHash = await bcrypt.hash(newPassword, 10);
         user.user_pass = newHash;
         await user.save();
-        return { message: 'Password changed successfully' };
+        return { message: 'Thay đổi mật khẩu thành công' };
+    };
+
+    static verifyEmailWithCode = async ({ code, email }) => {
+        const user = await database.User.findOne({
+            where: {
+                user_email: email,
+                email_verification_code: code,
+            },
+        });
+
+        if (!user) {
+            throw new BadRequestError('Invalid verification code or email');
+        }
+
+        if (user.email_verification_expires < new Date()) {
+            throw new BadRequestError('Verification code has expired');
+        }
+
+        if (user.email_verified) {
+            throw new BadRequestError('Email is already verified');
+        }
+
+        // Update user to mark email as verified
+        await user.update({
+            email_verified: true,
+            email_verification_code: null,
+            email_verification_expires: null,
+        });
+
+        // Send welcome email
+        await emailService.sendWelcomeEmail(user.user_email, user.user_login);
+
+        return {
+            message: 'Email verified successfully',
+            user: {
+                userId: user.id,
+                username: user.user_login,
+                email: user.user_email,
+                emailVerified: true,
+            },
+        };
+    };
+
+    static resendVerificationCode = async ({ email }) => {
+        const user = await database.User.findOne({
+            where: { user_email: email },
+        });
+
+        if (!user) {
+            throw new NotFoundError('User not found');
+        }
+
+        if (user.email_verified) {
+            throw new BadRequestError('Email is already verified');
+        }
+
+        // Generate new verification code
+        const verificationCode = emailService.generateVerificationCode();
+        const verificationExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes for testing
+
+        await user.update({
+            email_verification_code: verificationCode,
+            email_verification_expires: verificationExpires,
+        });
+
+        // Send verification email
+        const emailResult = await emailService.sendVerificationEmail(
+            user.user_email,
+            user.user_login,
+            verificationCode,
+        );
+
+        if (!emailResult.success) {
+            throw new BadRequestError('Failed to send verification email');
+        }
+
+        return {
+            message: 'Verification code sent successfully',
+            emailSent: true,
+            previewUrl: emailResult.previewUrl, // For development
+        };
+    };
+
+    static checkEmailVerificationStatus = async ({ email }) => {
+        const user = await database.User.findOne({
+            where: { user_email: email },
+        });
+
+        if (!user) {
+            throw new NotFoundError('User not found');
+        }
+
+        return {
+            email: user.user_email,
+            emailVerified: user.email_verified,
+            hasCode: !!user.email_verification_code,
+            codeExpired: user.email_verification_expires
+                ? user.email_verification_expires < new Date()
+                : false,
+        };
     };
 }
 

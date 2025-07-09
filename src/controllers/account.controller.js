@@ -7,7 +7,7 @@ class AccountController {
     getProfile = async (req, res, next) => {
         const userId = req.user?.userId;
         if (!userId) {
-            throw new Error('User ID not found in request');
+            throw new Error('Không tìm thấy ID người dùng trong yêu cầu');
         }
         new SuccessResponse({
             metadata: await AccountService.getProfile(userId),
@@ -17,10 +17,10 @@ class AccountController {
     updateProfile = async (req, res, next) => {
         const userId = req.user?.userId;
         if (!userId) {
-            throw new Error('User ID not found in request');
+            throw new Error('Không tìm thấy ID người dùng trong yêu cầu');
         }
         new SuccessResponse({
-            message: 'Profile updated',
+            message: 'Cập nhật hồ sơ thành công',
             metadata: await AccountService.updateProfile(userId, req.body),
         }).send(res);
     };

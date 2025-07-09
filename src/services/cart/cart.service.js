@@ -11,14 +11,16 @@ class CartService {
         totalAmount = 0.0,
         lineItems = [],
     }) {
-        if (!userId) throw new BadRequestError('userId is required');
+        if (!userId) throw new BadRequestError('userId là bắt buộc');
 
         // Check if user already has an active cart
         const existingActiveCart = await database.Cart.findOne({
             where: { user_id: userId, status: 'active' },
         });
         if (existingActiveCart) {
-            throw new BadRequestError('User already has an active cart');
+            throw new BadRequestError(
+                'Người dùng đã có giỏ hàng đang hoạt động',
+            );
         }
 
         const transaction = await database.sequelize.transaction();
@@ -138,14 +140,16 @@ class CartService {
             { where: { id } },
         );
         if (!affectedRows)
-            throw new NotFoundError('Cart not found or already deleted');
-        return { message: 'Cart set to inactive successfully' };
+            throw new NotFoundError('Không tìm thấy giỏ hàng hoặc đã bị xóa');
+        return {
+            message: 'Đặt giỏ hàng thành trạng thái không hoạt động thành công',
+        };
     }
 
     static async addToCart({ userId, productId, quantity = 1, price }) {
-        if (!userId) throw new BadRequestError('userId is required');
-        if (!productId) throw new BadRequestError('productId is required');
-        if (!price) throw new BadRequestError('price is required');
+        if (!userId) throw new BadRequestError('userId là bắt buộc');
+        if (!productId) throw new BadRequestError('productId là bắt buộc');
+        if (!price) throw new BadRequestError('price là bắt buộc');
 
         // Find or create active cart
         let cart = await database.Cart.findOne({
@@ -309,14 +313,15 @@ class CartService {
     }
 
     static async removeItemFromCart({ userId, productId }) {
-        if (!userId) throw new BadRequestError('userId is required');
-        if (!productId) throw new BadRequestError('productId is required');
+        if (!userId) throw new BadRequestError('userId là bắt buộc');
+        if (!productId) throw new BadRequestError('productId là bắt buộc');
 
         // Find active cart
         const cart = await database.Cart.findOne({
             where: { user_id: userId, status: 'active' },
         });
-        if (!cart) throw new NotFoundError('Active cart not found');
+        if (!cart)
+            throw new NotFoundError('Không tìm thấy giỏ hàng đang hoạt động');
 
         const transaction = await database.sequelize.transaction();
         try {

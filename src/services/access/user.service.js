@@ -26,7 +26,7 @@ class UserService {
             });
             if (existingAccount) {
                 throw new BadRequestError(
-                    'Error: Username already registered!',
+                    'Lỗi: Tên đăng nhập đã được đăng ký!',
                 );
             }
             // Step 2: hashing password
@@ -97,7 +97,7 @@ class UserService {
         try {
             const account = await database.Account.findByPk(userId);
             if (!account) {
-                throw new BadRequestError('User not found');
+                throw new BadRequestError('Không tìm thấy người dùng');
             }
 
             account.username = username;
@@ -111,7 +111,7 @@ class UserService {
                 where: { fk_user_code: userId },
             });
             if (!profile) {
-                throw new Error('Profile not found');
+                throw new Error('Không tìm thấy hồ sơ');
             }
 
             profile.first_name = firstName;
@@ -132,7 +132,7 @@ class UserService {
     static async markUserAsDeleted(userId) {
         const account = await database.Account.findByPk(userId);
         if (!account) {
-            throw new Error('User not found');
+            throw new Error('Không tìm thấy người dùng');
         }
 
         account.is_delete = true;
@@ -146,7 +146,7 @@ class UserService {
     static async markUserAsBlocked(userId, isBlock) {
         const account = await database.Account.findByPk(userId);
         if (!account) {
-            throw new Error('User not found');
+            throw new Error('Không tìm thấy người dùng');
         }
 
         account.is_block = isBlock;

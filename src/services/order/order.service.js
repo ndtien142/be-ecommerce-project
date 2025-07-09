@@ -18,18 +18,18 @@ class OrderService {
         orderedDate = new Date(),
     }) {
         // Validate required fields
-        if (!userId) throw new BadRequestError('userId is required');
+        if (!userId) throw new BadRequestError('userId là bắt buộc');
         if (
             !cart ||
             !Array.isArray(cart.lineItems) ||
             cart.lineItems.length === 0
         )
-            throw new BadRequestError('cart with lineItems is required');
-        if (!addressId) throw new BadRequestError('addressId is required');
+            throw new BadRequestError('cart với lineItems là bắt buộc');
+        if (!addressId) throw new BadRequestError('addressId là bắt buộc');
         if (!paymentMethodId)
-            throw new BadRequestError('paymentMethodId is required');
+            throw new BadRequestError('paymentMethodId là bắt buộc');
         if (!shippingMethodId)
-            throw new BadRequestError('shippingMethodId is required');
+            throw new BadRequestError('shippingMethodId là bắt buộc');
 
         // Fetch active cart from BE and compare with FE cart
         const beCart = await database.Cart.findOne({
@@ -62,7 +62,7 @@ class OrderService {
             )
         ) {
             throw new BadRequestError(
-                'Cart items do not match with server cart',
+                'Các mục trong giỏ hàng không khớp với giỏ hàng trên máy chủ',
             );
         }
 
@@ -200,7 +200,7 @@ class OrderService {
     }
 
     static async getOrderByIdForUser(orderId, userId) {
-        if (!userId) throw new BadRequestError('userId is required');
+        if (!userId) throw new BadRequestError('userId là bắt buộc');
         const order = await database.Order.findByPk(orderId, {
             include: [
                 { model: database.User, as: 'user' },
@@ -220,11 +220,9 @@ class OrderService {
                 },
             ],
         });
-        if (!order) throw new NotFoundError('Order not found');
+        if (!order) throw new NotFoundError('Không tìm thấy đơn hàng');
         if (order.user_id !== Number(userId)) {
-            throw new BadRequestError(
-                'You do not have permission to view this order',
-            );
+            throw new BadRequestError('Bạn không có quyền xem đơn hàng này');
         }
         return toCamel(order.toJSON());
     }
@@ -346,7 +344,9 @@ class OrderService {
             { where: { id } },
         );
         if (!affectedRows)
-            throw new NotFoundError('Order not found or not updated');
+            throw new NotFoundError(
+                'Không tìm thấy đơn hàng hoặc không được cập nhật',
+            );
         return await OrderService.getOrderById(id);
     }
 
@@ -356,14 +356,14 @@ class OrderService {
 
     static async updateOrderAddress(orderId, newAddressId) {
         const order = await database.Order.findByPk(orderId);
-        if (!order) throw new NotFoundError('Order not found');
+        if (!order) throw new NotFoundError('Không tìm thấy đơn hàng');
         if (
             ['shipping', 'delivered', 'returned', 'cancelled'].includes(
                 order.status,
             )
         ) {
             throw new BadRequestError(
-                'Cannot change address when order is shipping, delivered, returned, or cancelled',
+                'Không thể thay đổi địa chỉ khi đơn hàng đang vận chuyển, đã giao, đã trả lại hoặc đã hủy',
             );
         }
         order.address_id = newAddressId;

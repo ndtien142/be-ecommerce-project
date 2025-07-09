@@ -7,7 +7,7 @@ class OrderController {
     createOrder = async (req, res, next) => {
         const userId = req.user?.userId || req.headers['x-user-id'];
         new CREATED({
-            message: 'Order created successfully',
+            message: 'Tạo đơn hàng thành công',
             metadata: await OrderService.createOrder({ ...req.body, userId }),
         }).send(res);
     };
@@ -33,7 +33,7 @@ class OrderController {
 
     updateOrderStatus = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Order status updated successfully',
+            message: 'Cập nhật trạng thái đơn hàng thành công',
             metadata: await OrderService.updateOrderStatus(
                 req.params.id,
                 req.body.status,
@@ -43,14 +43,14 @@ class OrderController {
 
     cancelOrder = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Order cancelled successfully',
+            message: 'Hủy đơn hàng thành công',
             metadata: await OrderService.cancelOrder(req.params.id),
         }).send(res);
     };
 
     updateOrderAddress = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Order address updated successfully',
+            message: 'Cập nhật địa chỉ đơn hàng thành công',
             metadata: await OrderService.updateOrderAddress(
                 req.params.id,
                 req.body.addressId,
@@ -61,7 +61,7 @@ class OrderController {
     countOrdersByStatus = async (req, res, next) => {
         const userId = req.user?.userId || req.headers['x-user-id'];
         new SuccessResponse({
-            message: 'Order status count',
+            message: 'Đếm đơn hàng theo trạng thái',
             metadata: await OrderService.countOrdersByStatus(userId),
         }).send(res);
     };
@@ -78,7 +78,7 @@ class OrderController {
 
     countOrdersByStatusForAdmin = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Order status count for admin',
+            message: 'Đếm đơn hàng theo trạng thái cho quản trị viên',
             metadata: await OrderService.countOrdersByStatusForAdmin(),
         }).send(res);
     };

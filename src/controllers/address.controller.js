@@ -7,7 +7,7 @@ class AddressController {
     createAddress = async (req, res, next) => {
         const userId = req.user?.userId || req.headers['x-user-id'];
         new CREATED({
-            message: 'Address created successfully',
+            message: 'Tạo địa chỉ thành công',
             metadata: await AddressService.createAddress({
                 ...req.body,
                 userId,
@@ -30,7 +30,7 @@ class AddressController {
 
     updateAddress = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Address updated successfully',
+            message: 'Cập nhật địa chỉ thành công',
             metadata: await AddressService.updateAddress(
                 req.params.id,
                 req.body,
@@ -40,7 +40,7 @@ class AddressController {
 
     deleteAddress = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Address deleted successfully',
+            message: 'Xóa địa chỉ thành công',
             metadata: await AddressService.deleteAddress(req.params.id),
         }).send(res);
     };
@@ -49,7 +49,7 @@ class AddressController {
         const userId = req.user?.userId || req.headers['x-user-id'];
         const addressId = req.body.addressId;
         new SuccessResponse({
-            message: 'Default address set successfully',
+            message: 'Đặt địa chỉ mặc định thành công',
             metadata: await AddressService.setDefaultAddress(userId, addressId),
         }).send(res);
     };

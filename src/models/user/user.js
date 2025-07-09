@@ -53,6 +53,19 @@ function model(sequelize) {
             type: DataTypes.DATE,
             allowNull: true,
         },
+        email_verified: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false,
+        },
+        email_verification_code: {
+            type: DataTypes.STRING(6),
+            allowNull: true,
+        },
+        email_verification_expires: {
+            type: DataTypes.DATE,
+            allowNull: true,
+        },
     };
 
     const options = {

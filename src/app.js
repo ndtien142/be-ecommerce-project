@@ -57,6 +57,10 @@ require('./models/index');
 // const { countConnect } = require("./helpers/check.connect");
 // countConnect();
 
+// init jobs
+const jobManager = require('./jobs');
+jobManager.init();
+
 // init swagger
 app.use('/v1/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // init routes

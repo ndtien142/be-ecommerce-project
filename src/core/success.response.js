@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 const StatusCode = {
     OK: 200,
@@ -6,8 +6,8 @@ const StatusCode = {
 };
 
 const ReasonStatusCode = {
-    OK: "OK",
-    CREATED: "CREATED",
+    OK: 'THÀNH CÔNG',
+    CREATED: 'TẠO THÀNH CÔNG',
 };
 
 class SuccessResponse {
