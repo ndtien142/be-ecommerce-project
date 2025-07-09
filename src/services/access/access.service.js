@@ -138,7 +138,7 @@ class AccessService {
 
         // Generate email verification code
         const verificationCode = emailService.generateVerificationCode();
-        const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        const verificationExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes for testing
 
         const newAccount = await createAccount({
             username,
@@ -245,10 +245,6 @@ class AccessService {
             throw new BadRequestError('Error: Username already registered!');
         }
 
-        if (existingAccount.user_email) {
-            throw new BadRequestError('Error: Email already registered!');
-        }
-
         // Step 2: hashing password
         const passwordHash = await bcrypt.hash(password, 10);
 
@@ -259,7 +255,7 @@ class AccessService {
 
         // Generate email verification code
         const verificationCode = emailService.generateVerificationCode();
-        const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        const verificationExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes for testing
 
         const newAccount = await createAccount({
             username,
@@ -530,7 +526,7 @@ class AccessService {
 
         // Generate new verification code
         const verificationCode = emailService.generateVerificationCode();
-        const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const verificationExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes for testing
 
         await user.update({
             email_verification_code: verificationCode,

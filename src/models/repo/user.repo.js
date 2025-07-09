@@ -167,33 +167,51 @@ const deleteAccountWithRelations = async (userId) => {
             const transaction = await db.sequelize.transaction();
 
             try {
-                // Delete related records that don't affect business logic
+                // Delete related records in the correct order to avoid foreign key constraint errors
 
-                // Delete user profile
-                await db.Profile.destroy({
-                    where: { user_id: userId },
-                    transaction,
-                });
-
-                // Delete key tokens
-                await db.KeyToken.destroy({
-                    where: { user_id: userId },
-                    transaction,
-                });
-
-                // Delete refresh tokens used
+                // 1. Delete refresh tokens used (references KeyToken)
                 await db.RefreshTokenUsed.destroy({
                     where: { user_id: userId },
                     transaction,
                 });
 
-                // Delete user addresses
+                // 2. Delete key tokens (references User)
+                await db.KeyToken.destroy({
+                    where: { user_id: userId },
+                    transaction,
+                });
+
+                // 3. Delete user profile (references User)
+                await db.Profile.destroy({
+                    where: { user_id: userId },
+                    transaction,
+                });
+
+                // 4. Delete user addresses (references User)
                 await db.UserAddress.destroy({
                     where: { user_id: userId },
                     transaction,
                 });
 
-                // Finally delete the user
+                // 5. Delete customer payment options (references User)
+                await db.CustomerPaymentOption.destroy({
+                    where: { user_id: userId },
+                    transaction,
+                });
+
+                // 6. Delete import receipts (references User) - only if they exist
+                const importReceiptCount = await db.ImportReceipt.count({
+                    where: { user_id: userId },
+                    transaction,
+                });
+                if (importReceiptCount > 0) {
+                    await db.ImportReceipt.destroy({
+                        where: { user_id: userId },
+                        transaction,
+                    });
+                }
+
+                // 7. Finally delete the user
                 await db.User.destroy({
                     where: { id: userId },
                     transaction,
@@ -201,11 +219,15 @@ const deleteAccountWithRelations = async (userId) => {
 
                 await transaction.commit();
                 console.log(
-                    `  🗑️ Hard deleted user ${userId} (no orders/cart)`,
+                    `  🗑️ Hard deleted user ${userId} and all related records (no orders/cart)`,
                 );
                 return 1;
             } catch (error) {
                 await transaction.rollback();
+                console.error(
+                    `  ❌ Error during hard delete transaction for user ${userId}:`,
+                    error,
+                );
                 throw error;
             }
         }

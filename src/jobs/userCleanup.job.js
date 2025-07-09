@@ -18,7 +18,7 @@ class UserCleanupJob {
      */
     start() {
         console.log(
-            '🔄 Starting user cleanup job - checking every 5 minutes for unverified accounts older than 15 minutes',
+            '🔄 Starting user cleanup job - checking every 5 minutes for unverified accounts older than 5 minutes',
         );
 
         this.job = cron.schedule(
@@ -47,18 +47,18 @@ class UserCleanupJob {
     }
 
     /**
-     * Clean up unverified accounts older than 15 minutes
+     * Clean up unverified accounts older than 5 minutes
      * - Excludes admin users (they will never be deleted)
      * - Hard deletes users with no orders/cart
      * - Soft deletes users with orders/cart to preserve data integrity
      */
     async cleanupUnverifiedAccounts() {
         try {
-            const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
 
-            // Find unverified accounts older than 15 minutes (excluding admins)
+            // Find unverified accounts older than 5 minutes (excluding admins)
             const expiredAccounts =
-                await userRepo.findUnverifiedExpiredAccounts(fifteenMinutesAgo);
+                await userRepo.findUnverifiedExpiredAccounts(fiveMinutesAgo);
 
             if (expiredAccounts.length === 0) {
                 console.log(
