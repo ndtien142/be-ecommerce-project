@@ -1,7 +1,5 @@
 'use strict';
 
-const { findByKey } = require('../models/repositories/apikey.repo');
-
 const HEADER = {
     // API_KEY: "x-api-key",
     AUTHORIZATION: 'authorization',
@@ -47,8 +45,3 @@ const HEADER = {
 //         return next();
 //     };
 // };
-
-module.exports = {
-    apiKey,
-    permission,
-};
