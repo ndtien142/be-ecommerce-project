@@ -10,6 +10,8 @@ const createAccount = async ({
     avatarUrl,
     registered = new Date(),
     status = 'normal',
+    emailVerificationCode = null,
+    emailVerificationExpires = null,
 }) => {
     const result = await db.User.create({
         user_login: username,
@@ -21,6 +23,8 @@ const createAccount = async ({
         user_status: status,
         user_date_of_birth: dateOfBirth,
         role_id: roleId,
+        email_verification_code: emailVerificationCode,
+        email_verification_expires: emailVerificationExpires,
     });
     console.log(result);
     return result;

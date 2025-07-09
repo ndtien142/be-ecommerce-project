@@ -44,6 +44,29 @@ class AccessController {
             }),
         }).send(res);
     };
+
+    verifyEmailWithCode = async (req, res, next) => {
+        new SuccessResponse({
+            message: 'Email verified successfully',
+            metadata: await AccessService.verifyEmailWithCode(req.body),
+        }).send(res);
+    };
+
+    resendVerificationCode = async (req, res, next) => {
+        new SuccessResponse({
+            message: 'Verification code sent',
+            metadata: await AccessService.resendVerificationCode(req.body),
+        }).send(res);
+    };
+
+    checkEmailVerificationStatus = async (req, res, next) => {
+        new SuccessResponse({
+            message: 'Email verification status retrieved',
+            metadata: await AccessService.checkEmailVerificationStatus(
+                req.body,
+            ),
+        }).send(res);
+    };
 }
 
 module.exports = new AccessController();

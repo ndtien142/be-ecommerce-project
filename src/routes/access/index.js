@@ -15,7 +15,7 @@ const router = express.Router();
 
 /**
  * @swagger
- * /signup:
+ * /auth/signup:
  *   post:
  *     summary: User signup (admin/staff)
  *     tags: [Access]
@@ -48,7 +48,7 @@ const router = express.Router();
  */
 /**
  * @swagger
- * /login:
+ * /auth/login:
  *   post:
  *     summary: User login
  *     tags: [Access]
@@ -99,7 +99,7 @@ const router = express.Router();
 
 /**
  * @swagger
- * /logout:
+ * /auth/logout:
  *   post:
  *     summary: User logout
  *     tags: [Access]
@@ -123,7 +123,7 @@ const router = express.Router();
  */
 /**
  * @swagger
- * /refresh-token:
+ * /auth/refresh-token:
  *   post:
  *     summary: Refresh access token
  *     tags: [Access]
@@ -168,7 +168,7 @@ const router = express.Router();
  */
 /**
  * @swagger
- * /refresh-token:
+ * /auth/refresh-token:
  *   post:
  *     summary: Refresh access token
  *     tags: [Access]
@@ -213,7 +213,7 @@ const router = express.Router();
  */
 /**
  * @swagger
- * /change-password:
+ * /auth/change-password:
  *   post:
  *     summary: Change user password
  *     tags: [Access]
@@ -251,11 +251,152 @@ const router = express.Router();
  *         description: Old password is incorrect or user not found
  */
 
+/**
+ * @swagger
+ * /auth/verify-email-code:
+ *   post:
+ *     summary: Verify user email with 6-digit code
+ *     tags: [Access]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - code
+ *               - email
+ *             properties:
+ *               code:
+ *                 type: string
+ *                 description: 6-digit verification code
+ *                 example: "123456"
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User email address
+ *                 example: "user@example.com"
+ *     responses:
+ *       200:
+ *         description: Email verified successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     userId:
+ *                       type: number
+ *                     username:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     emailVerified:
+ *                       type: boolean
+ *       400:
+ *         description: Invalid or expired code, or email already verified
+ */
+
+/**
+ * @swagger
+ * /auth/resend-verification-code:
+ *   post:
+ *     summary: Resend email verification code
+ *     tags: [Access]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User email to resend verification code
+ *                 example: "user@example.com"
+ *     responses:
+ *       200:
+ *         description: Verification code sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 emailSent:
+ *                   type: boolean
+ *       400:
+ *         description: Email already verified or failed to send email
+ *       404:
+ *         description: User not found
+ */
+
+/**
+ * @swagger
+ * /auth/check-verification-status:
+ *   post:
+ *     summary: Check email verification status
+ *     tags: [Access]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User email to check status
+ *     responses:
+ *       200:
+ *         description: Email verification status retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 email:
+ *                   type: string
+ *                 emailVerified:
+ *                   type: boolean
+ *                 hasCode:
+ *                   type: boolean
+ *                 codeExpired:
+ *                   type: boolean
+ *       404:
+ *         description: User not found
+ */
+
 router.post('/signup', asyncHandler(accessController.signUp));
 router.post('/login', asyncHandler(accessController.login));
 router.post(
     '/customer/signup',
     asyncHandler(accessController.signUpForCustomer),
+);
+
+// Email verification routes (public)
+router.post(
+    '/verify-email-code',
+    asyncHandler(accessController.verifyEmailWithCode),
+);
+router.post(
+    '/resend-verification-code',
+    asyncHandler(accessController.resendVerificationCode),
+);
+router.post(
+    '/check-verification-status',
+    asyncHandler(accessController.checkEmailVerificationStatus),
 );
 
 router.use(authenticationV2);
