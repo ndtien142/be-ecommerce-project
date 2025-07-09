@@ -18,7 +18,7 @@ class UserCleanupJob {
      */
     start() {
         console.log(
-            '🔄 Starting user cleanup job - checking every 5 minutes for unverified accounts older than 5 minutes',
+            '🔄 Bắt đầu công việc dọn dẹp người dùng - kiểm tra mỗi 5 phút cho các tài khoản chưa xác thực quá 5 phút',
         );
 
         this.job = cron.schedule(
@@ -42,7 +42,7 @@ class UserCleanupJob {
     stop() {
         if (this.job) {
             this.job.stop();
-            console.log('⏹️ User cleanup job stopped');
+            console.log('⏹️ Đã dừng công việc dọn dẹp người dùng');
         }
     }
 
@@ -62,13 +62,13 @@ class UserCleanupJob {
 
             if (expiredAccounts.length === 0) {
                 console.log(
-                    '✅ No expired unverified accounts found (admins excluded)',
+                    '✅ Không tìm thấy tài khoản chưa xác thực hết hạn (đã loại trừ admin)',
                 );
                 return;
             }
 
             console.log(
-                `🧹 Found ${expiredAccounts.length} expired unverified accounts to clean up (admins excluded):`,
+                `🧹 Tìm thấy ${expiredAccounts.length} tài khoản chưa xác thực hết hạn cần dọn dẹp (đã loại trừ admin):`,
             );
 
             // Log the accounts being deleted
@@ -77,7 +77,7 @@ class UserCleanupJob {
                     (Date.now() - account.create_time.getTime()) / (1000 * 60),
                 );
                 console.log(
-                    `  - ${account.user_login} (${account.user_email}) - ${timeDiff} minutes old`,
+                    `  - ${account.user_login} (${account.user_email}) - ${timeDiff} phút tuổi`,
                 );
             });
 
@@ -89,17 +89,17 @@ class UserCleanupJob {
                     deletedCount++;
                 } catch (error) {
                     console.error(
-                        `  ❌ Failed to delete account ${account.user_login}:`,
+                        `  ❌ Không thể xóa tài khoản ${account.user_login}:`,
                         error.message,
                     );
                 }
             }
 
             console.log(
-                `🗑️ Successfully processed ${deletedCount} expired unverified accounts`,
+                `🗑️ Đã xử lý thành công ${deletedCount} tài khoản chưa xác thực hết hạn`,
             );
         } catch (error) {
-            console.error('❌ Error during user cleanup:', error);
+            console.error('❌ Lỗi trong quá trình dọn dẹp người dùng:', error);
         }
     }
 
@@ -107,7 +107,7 @@ class UserCleanupJob {
      * Manual cleanup trigger for testing
      */
     async manualCleanup() {
-        console.log('🔧 Manual cleanup triggered');
+        console.log('🔧 Kích hoạt dọn dẹp thủ công');
         await this.cleanupUnverifiedAccounts();
     }
 }

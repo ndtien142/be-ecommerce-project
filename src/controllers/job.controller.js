@@ -13,7 +13,7 @@ class JobController {
 
             if (!userCleanupJob) {
                 return new SuccessResponse({
-                    message: 'User cleanup job not found',
+                    message: 'Không tìm thấy công việc dọn dẹp người dùng',
                     metadata: { success: false },
                 }).send(res);
             }
@@ -21,7 +21,7 @@ class JobController {
             await userCleanupJob.manualCleanup();
 
             return new SuccessResponse({
-                message: 'User cleanup job triggered successfully',
+                message: 'Đã kích hoạt công việc dọn dẹp người dùng thành công',
                 metadata: { success: true },
             }).send(res);
         } catch (error) {
@@ -47,7 +47,7 @@ class JobController {
             };
 
             return new SuccessResponse({
-                message: 'Job status retrieved successfully',
+                message: 'Lấy trạng thái công việc thành công',
                 metadata: status,
             }).send(res);
         } catch (error) {

@@ -6,21 +6,21 @@ const UserService = require('../services/access/user.service');
 class UserController {
     createUser = async (req, res, next) => {
         new CREATED({
-            message: 'Create new user successfully',
+            message: 'Tạo người dùng mới thành công',
             metadata: await UserService.createUser(req.body),
         }).send(res);
     };
 
     getUserById = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Get user by id successfully',
+            message: 'Lấy người dùng theo ID thành công',
             metadata: await UserService.getUser(req.params.id),
         }).send(res);
     };
 
     updateUser = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Update user successfully',
+            message: 'Cập nhật người dùng thành công',
             metadata: await UserService.updateUser({
                 userId: req.params.id,
                 ...req.body,
@@ -30,14 +30,14 @@ class UserController {
 
     markUserAsDeleted = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Mark user as deleted successfully',
+            message: 'Đánh dấu người dùng đã xóa thành công',
             metadata: await UserService.markUserAsDeleted(req.params.id),
         }).send(res);
     };
 
     markUserAsBlocked = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Update user block status successfully',
+            message: 'Cập nhật trạng thái chặn người dùng thành công',
             metadata: await UserService.markUserAsBlocked(
                 req.params.id,
                 req.body.isBlock,
@@ -47,7 +47,7 @@ class UserController {
 
     getAllUsers = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Get all users successfully',
+            message: 'Lấy tất cả người dùng thành công',
             metadata: await UserService.getUsers(req.query),
         }).send(res);
     };

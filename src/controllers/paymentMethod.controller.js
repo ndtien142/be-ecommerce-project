@@ -6,7 +6,7 @@ const { SuccessResponse, CREATED } = require('../core/success.response');
 class PaymentMethodController {
     createPaymentMethod = async (req, res, next) => {
         new CREATED({
-            message: 'Payment method created successfully',
+            message: 'Tạo phương thức thanh toán thành công',
             metadata: await PaymentMethodService.createPaymentMethod(req.body),
         }).send(res);
     };
@@ -29,7 +29,7 @@ class PaymentMethodController {
 
     updatePaymentMethod = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Payment method updated successfully',
+            message: 'Cập nhật phương thức thanh toán thành công',
             metadata: await PaymentMethodService.updatePaymentMethod(
                 req.params.id,
                 req.body,
@@ -39,7 +39,7 @@ class PaymentMethodController {
 
     changeStatus = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Payment method status updated successfully',
+            message: 'Cập nhật trạng thái phương thức thanh toán thành công',
             metadata: await PaymentMethodService.changeStatus(
                 req.params.id,
                 req.body.status,

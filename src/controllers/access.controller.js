@@ -11,25 +11,25 @@ class AccessController {
     };
     signUp = async (req, res, next) => {
         new CREATED({
-            message: 'Registered OK',
+            message: 'Đăng ký thành công',
             metadata: await AccessService.signUp(req.body),
         }).send(res);
     };
     logout = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Logout OK',
+            message: 'Đăng xuất thành công',
             metadata: await AccessService.logout(req.body),
         }).send(res);
     };
     signUpForCustomer = async (req, res, next) => {
         new CREATED({
-            message: 'Registered OK',
+            message: 'Đăng ký thành công',
             metadata: await AccessService.signUpCustomer(req.body),
         }).send(res);
     };
     refreshToken = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Refresh token OK',
+            message: 'Làm mới token thành công',
             metadata: await AccessService.handlerRefreshToken(req.body),
         }).send(res);
     };
@@ -37,7 +37,7 @@ class AccessController {
     changePassword = async (req, res, next) => {
         const userId = req.user.userId;
         new SuccessResponse({
-            message: 'Password changed successfully',
+            message: 'Thay đổi mật khẩu thành công',
             metadata: await AccessService.changePassword({
                 userId,
                 ...req.body,

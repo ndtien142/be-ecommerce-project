@@ -19,7 +19,7 @@ class AddressService {
         phoneNumber,
         ...rest
     }) {
-        if (!userId) throw new BadRequestError('userId is required');
+        if (!userId) throw new BadRequestError('userId là bắt buộc');
         // If isDefault is true, set all user's addresses to is_default: false
         if (isDefault === true) {
             await database.UserAddress.update(
@@ -70,13 +70,13 @@ class AddressService {
     static async deleteAddress(id) {
         const deleted = await database.UserAddress.destroy({ where: { id } });
         if (!deleted)
-            throw new NotFoundError('Address not found or already deleted');
-        return { message: 'Address deleted successfully' };
+            throw new NotFoundError('Không tìm thấy địa chỉ hoặc đã bị xóa');
+        return { message: 'Xóa địa chỉ thành công' };
     }
 
     static async setDefaultAddress(userId, addressId) {
         if (!userId || !addressId)
-            throw new BadRequestError('userId and addressId are required');
+            throw new BadRequestError('userId và addressId là bắt buộc');
         // Remove default from all user's addresses
         await database.UserAddress.update(
             { is_default: false },
@@ -88,7 +88,9 @@ class AddressService {
             { where: { id: addressId, user_id: userId } },
         );
         if (!affectedRows)
-            throw new NotFoundError('Address not found or not updated');
+            throw new NotFoundError(
+                'Không tìm thấy địa chỉ hoặc không được cập nhật',
+            );
         return await AddressService.getAddressById(addressId);
     }
 }

@@ -54,7 +54,7 @@ class ProductService {
             brandId !== null &&
             isNaN(Number(brandId))
         ) {
-            throw new BadRequestError('brandId must be a number');
+            throw new BadRequestError('brandId phải là số');
         }
         // Validate inventoryType length (adjust max length as per your DB schema)
         if (
@@ -64,17 +64,18 @@ class ProductService {
             inventoryType.length > 20
         ) {
             throw new BadRequestError(
-                'inventoryType is too long (max 20 chars)',
+                'inventoryType quá dài (tối đa 20 ký tự)',
             );
         }
         // Check if slug already exists
         const existing = await database.Product.findOne({ where: { slug } });
-        if (existing) throw new BadRequestError('Product slug already exists');
+        if (existing) throw new BadRequestError('Slug sản phẩm đã tồn tại');
         // Check if brand exists if brandId is provided
         let brandObj = null;
         if (brandId !== undefined && brandId !== null) {
             brandObj = await database.Brand.findByPk(brandId);
-            if (!brandObj) throw new BadRequestError('Brand not found');
+            if (!brandObj)
+                throw new BadRequestError('Không tìm thấy thương hiệu');
         }
 
         // Validate and create product images if provided

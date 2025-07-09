@@ -16,20 +16,21 @@ class CategoriesService {
     }) {
         if (!name || typeof name !== 'string') {
             throw new BadRequestError(
-                'Category name is required and must be a string',
+                'Tên danh mục là bắt buộc và phải là chuỗi',
             );
         }
         if (!slug || typeof slug !== 'string') {
             throw new BadRequestError(
-                'Category slug is required and must be a string',
+                'Slug danh mục là bắt buộc và phải là chuỗi',
             );
         }
         const existing = await database.Category.findOne({ where: { slug } });
-        if (existing) throw new BadRequestError('Category slug already exists');
+        if (existing) throw new BadRequestError('Slug danh mục đã tồn tại');
         let parent_id = parentId;
         if (parentId !== undefined && parentId !== null && parentId !== 0) {
             const parent = await database.Category.findByPk(parentId);
-            if (!parent) throw new BadRequestError('Parent category not found');
+            if (!parent)
+                throw new BadRequestError('Không tìm thấy danh mục cha');
         }
         const category = await database.Category.create({
             name,
@@ -51,7 +52,7 @@ class CategoriesService {
                 { model: database.Product, as: 'products' },
             ],
         });
-        if (!category) throw new NotFoundError('Category not found');
+        if (!category) throw new NotFoundError('Không tìm thấy danh mục');
         return toCamel(category.toJSON());
     }
 
@@ -105,7 +106,9 @@ class CategoriesService {
             where: { id },
         });
         if (!affectedRows)
-            throw new NotFoundError('Category not found or not updated');
+            throw new NotFoundError(
+                'Không tìm thấy danh mục hoặc không được cập nhật',
+            );
         return await CategoriesService.getCategoryById(id);
     }
 
@@ -120,7 +123,7 @@ class CategoriesService {
             },
         );
         if (!affectedRows)
-            throw new NotFoundError('Category not found or already deleted');
+            throw new NotFoundError('Không tìm thấy danh mục hoặc đã bị xóa');
         return {
             message: 'Category deleted (status set to inactive) successfully',
         };
@@ -142,7 +145,7 @@ class CategoriesService {
             { parent_id: newParentId },
             { where: { id: categoryId } },
         );
-        if (!affectedRows) throw new NotFoundError('Category not found');
+        if (!affectedRows) throw new NotFoundError('Không tìm thấy danh mục');
 
         // Reorder siblings (including the moved category)
         if (Array.isArray(orderedSiblingIds) && orderedSiblingIds.length > 0) {
@@ -197,7 +200,7 @@ class CategoriesService {
 
     static async reorderFullCategoryTree(treeData) {
         if (!Array.isArray(treeData)) {
-            throw new BadRequestError('Invalid tree structure');
+            throw new BadRequestError('Cấu trúc cây không hợp lệ');
         }
 
         const updates = [];

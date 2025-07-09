@@ -6,7 +6,7 @@ const { SuccessResponse, CREATED } = require('../core/success.response');
 class ShippingMethodController {
     createShippingMethod = async (req, res, next) => {
         new CREATED({
-            message: 'Shipping method created successfully',
+            message: 'Tạo phương thức vận chuyển thành công',
             metadata: await ShippingMethodService.createShippingMethod(
                 req.body,
             ),
@@ -31,7 +31,7 @@ class ShippingMethodController {
 
     updateShippingMethod = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Shipping method updated successfully',
+            message: 'Cập nhật phương thức vận chuyển thành công',
             metadata: await ShippingMethodService.updateShippingMethod(
                 req.params.id,
                 req.body,
@@ -41,7 +41,7 @@ class ShippingMethodController {
 
     changeStatus = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Shipping method status updated successfully',
+            message: 'Cập nhật trạng thái phương thức vận chuyển thành công',
             metadata: await ShippingMethodService.changeStatus(
                 req.params.id,
                 req.body.status,

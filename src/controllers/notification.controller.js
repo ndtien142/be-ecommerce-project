@@ -7,7 +7,7 @@ class NotificationController {
             req.user.userId,
         );
         new SuccessResponse({
-            message: 'Get notifications successfully',
+            message: 'Lấy thông báo thành công',
             metadata: notifications,
         }).send(res);
     };
@@ -15,7 +15,7 @@ class NotificationController {
     markAsRead = async (req, res, next) => {
         await NotificationService.markAsRead(req.params.id);
         new SuccessResponse({
-            message: 'Notification marked as read',
+            message: 'Đánh dấu thông báo đã đọc thành công',
         }).send(res);
     };
 }

@@ -6,7 +6,7 @@ const { CREATED, SuccessResponse } = require('../core/success.response');
 class ProductController {
     createProduct = async (req, res, next) => {
         new CREATED({
-            message: 'Product created successfully',
+            message: 'Tạo sản phẩm thành công',
             metadata: await ProductService.createProduct(req.body),
         }).send(res);
     };
@@ -25,7 +25,7 @@ class ProductController {
 
     updateProduct = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Product updated successfully',
+            message: 'Cập nhật sản phẩm thành công',
             metadata: await ProductService.updateProduct(
                 req.params.id,
                 req.body,
@@ -35,7 +35,7 @@ class ProductController {
 
     deleteProduct = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Product deleted successfully',
+            message: 'Xóa sản phẩm thành công',
             metadata: await ProductService.deleteProduct(req.params.id),
         }).send(res);
     };

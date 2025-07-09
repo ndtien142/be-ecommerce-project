@@ -6,7 +6,7 @@ const { CREATED, SuccessResponse } = require('../core/success.response');
 class BrandController {
     createBrand = async (req, res, next) => {
         new CREATED({
-            message: 'Brand created successfully',
+            message: 'Tạo thương hiệu thành công',
             metadata: await BrandService.createBrand(req.body),
         }).send(res);
     };
@@ -25,14 +25,14 @@ class BrandController {
 
     updateBrand = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Brand updated successfully',
+            message: 'Cập nhật thương hiệu thành công',
             metadata: await BrandService.updateBrand(req.params.id, req.body),
         }).send(res);
     };
 
     deleteBrand = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Brand deleted successfully',
+            message: 'Xóa thương hiệu thành công',
             metadata: await BrandService.deleteBrand(req.params.id),
         }).send(res);
     };

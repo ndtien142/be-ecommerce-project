@@ -8,7 +8,7 @@ class CartController {
         // Use userId from authenticationV2
         const userId = req.user.userId;
         new CREATED({
-            message: 'Cart created successfully',
+            message: 'Tạo giỏ hàng thành công',
             metadata: await CartService.createCart({ ...req.body, userId }),
         }).send(res);
     };
@@ -28,14 +28,14 @@ class CartController {
 
     updateCart = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Cart updated successfully',
+            message: 'Cập nhật giỏ hàng thành công',
             metadata: await CartService.updateCart(req.params.id, req.body),
         }).send(res);
     };
 
     deleteCart = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Cart deleted successfully',
+            message: 'Xóa giỏ hàng thành công',
             metadata: await CartService.deleteCart(req.params.id),
         }).send(res);
     };
@@ -43,7 +43,7 @@ class CartController {
     addToCart = async (req, res, next) => {
         const userId = req.user.userId;
         new SuccessResponse({
-            message: 'Item added to cart',
+            message: 'Thêm sản phẩm vào giỏ hàng thành công',
             metadata: await CartService.addToCart({ ...req.body, userId }),
         }).send(res);
     };
@@ -51,7 +51,7 @@ class CartController {
     minusItemQuantity = async (req, res, next) => {
         const userId = req.user.userId;
         new SuccessResponse({
-            message: 'Item quantity decreased',
+            message: 'Giảm số lượng sản phẩm thành công',
             metadata: await CartService.minusItemQuantity({
                 ...req.body,
                 userId,
@@ -62,7 +62,7 @@ class CartController {
     plusItemQuantity = async (req, res, next) => {
         const userId = req.user.userId;
         new SuccessResponse({
-            message: 'Item quantity increased',
+            message: 'Tăng số lượng sản phẩm thành công',
             metadata: await CartService.plusItemQuantity({
                 ...req.body,
                 userId,
@@ -73,7 +73,7 @@ class CartController {
     removeItemFromCart = async (req, res, next) => {
         const userId = req.user.userId;
         new SuccessResponse({
-            message: 'Item removed from cart',
+            message: 'Xóa sản phẩm khỏi giỏ hàng thành công',
             metadata: await CartService.removeItemFromCart({
                 ...req.body,
                 userId,
@@ -84,7 +84,7 @@ class CartController {
     countCartItems = async (req, res, next) => {
         const userId = req.user.userId;
         new SuccessResponse({
-            message: 'Cart item count',
+            message: 'Đếm số lượng sản phẩm trong giỏ hàng',
             metadata: await CartService.countCartItems(userId),
         }).send(res);
     };

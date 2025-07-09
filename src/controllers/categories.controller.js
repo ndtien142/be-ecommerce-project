@@ -6,7 +6,7 @@ const { CREATED, SuccessResponse } = require('../core/success.response');
 class CategoriesController {
     createCategory = async (req, res, next) => {
         new CREATED({
-            message: 'Category created successfully',
+            message: 'Tạo danh mục thành công',
             metadata: await CategoriesService.createCategory(req.body),
         }).send(res);
     };
@@ -25,7 +25,7 @@ class CategoriesController {
 
     updateCategory = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Category updated successfully',
+            message: 'Cập nhật danh mục thành công',
             metadata: await CategoriesService.updateCategory(
                 req.params.id,
                 req.body,
@@ -35,7 +35,7 @@ class CategoriesController {
 
     deleteCategory = async (req, res, next) => {
         new SuccessResponse({
-            message: 'Category deleted successfully',
+            message: 'Xóa danh mục thành công',
             metadata: await CategoriesService.deleteCategory(req.params.id),
         }).send(res);
     };

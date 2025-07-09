@@ -118,7 +118,7 @@ class AccessService {
         // step 1: check username exist
         const existingAccount = await getAccountByUserLogin(username);
         if (existingAccount) {
-            throw new BadRequestError('Error: Username already registered!');
+            throw new BadRequestError('Lỗi: Tên đăng nhập đã được đăng ký!');
         }
         // Step 2: hashing password
         const passwordHash = await bcrypt.hash(password, 10);
@@ -127,12 +127,12 @@ class AccessService {
         if (roleName) {
             role = await getRoleByName(roleName);
             if (!role) {
-                throw new BadRequestError('Role not found');
+                throw new BadRequestError('Không tìm thấy vai trò');
             }
         } else {
             role = await getRoleByName(roleName);
             if (!role) {
-                throw new BadRequestError('Default role not found');
+                throw new BadRequestError('Không tìm thấy vai trò mặc định');
             }
         }
 
@@ -242,15 +242,14 @@ class AccessService {
         // step 1: check username exist
         const existingAccount = await getAccountByUserLogin(username);
         if (existingAccount) {
-            throw new BadRequestError('Error: Username already registered!');
+            throw new BadRequestError('Lỗi: Tên đăng nhập đã được đăng ký!');
         }
-
         // Step 2: hashing password
         const passwordHash = await bcrypt.hash(password, 10);
 
         const role = await getRoleByName('customer');
         if (!role) {
-            throw new BadRequestError('Role not found');
+            throw new BadRequestError('Không tìm thấy vai trò');
         }
 
         // Generate email verification code
@@ -462,12 +461,12 @@ class AccessService {
         }
         const match = await bcrypt.compare(oldPassword, user.user_pass);
         if (!match) {
-            throw new BadRequestError('Old password is incorrect');
+            throw new BadRequestError('Mật khẩu cũ không chính xác');
         }
         const newHash = await bcrypt.hash(newPassword, 10);
         user.user_pass = newHash;
         await user.save();
-        return { message: 'Password changed successfully' };
+        return { message: 'Thay đổi mật khẩu thành công' };
     };
 
     static verifyEmailWithCode = async ({ code, email }) => {
