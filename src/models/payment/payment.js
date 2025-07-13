@@ -12,7 +12,13 @@ module.exports = (sequelize) => {
             },
             order_id: { type: DataTypes.INTEGER, allowNull: false },
             payment_method: {
-                type: DataTypes.ENUM('cash', 'momo', 'vnpay', 'bank_transfer'),
+                type: DataTypes.ENUM(
+                    'cash',
+                    'momo',
+                    'vnpay',
+                    'bank_transfer',
+                    'momo_refund',
+                ),
                 allowNull: false,
                 defaultValue: 'cash',
             },
@@ -29,6 +35,8 @@ module.exports = (sequelize) => {
                     'failed',
                     'cancelled',
                     'expired',
+                    'refunded',
+                    'partially_refunded',
                 ),
                 allowNull: false,
                 defaultValue: 'pending',

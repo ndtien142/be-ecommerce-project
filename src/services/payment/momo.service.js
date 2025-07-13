@@ -903,6 +903,1180 @@ class MomoPaymentService {
             };
         }
     }
+
+    /**
+     * Create MoMo refund request
+     * @param {Object} refundData - Refund data
+     * @param {string} refundData.originalOrderId - Original order ID that was paid
+     * @param {string} refundData.refundOrderId - New order ID for refund (must be different from original)
+     * @param {number} refundData.amount - Amount to refund
+     * @param {string} refundData.transId - Original MoMo transaction ID
+     * @param {string} refundData.description - Refund description
+     * @param {Array} refundData.transGroup - Items to refund (optional for itemized refunds)
+     * @returns {Object} Refund response
+     */
+    static async createRefund({
+        originalOrderId,
+        refundOrderId,
+        amount,
+        transId,
+        description = 'Refund order',
+        transGroup = [],
+    }) {
+        try {
+            // Validate input
+            if (!originalOrderId || !refundOrderId || !amount || !transId) {
+                throw new BadRequestError('Required refund parameters missing');
+            }
+
+            // Generate request ID for refund
+            const requestId = `REF_${refundOrderId}_${new Date().getTime()}`;
+
+            // Create raw signature string for refund
+            const rawSignature = `accessKey=${momoConfig.accessKey}&amount=${amount}&description=${description}&orderId=${refundOrderId}&partnerCode=${momoConfig.partnerCode}&requestId=${requestId}&transId=${transId}`;
+
+            // Create signature
+            const signature = crypto
+                .createHmac('sha256', momoConfig.secretKey)
+                .update(rawSignature)
+                .digest('hex');
+
+            // Create request body
+            const requestBody = {
+                partnerCode: momoConfig.partnerCode,
+                orderId: refundOrderId,
+                requestId: requestId,
+                amount: amount,
+                transId: transId,
+                lang: momoConfig.lang,
+                description: description,
+                signature: signature,
+            };
+
+            // Add transGroup if provided (for itemized refunds)
+            if (transGroup && transGroup.length > 0) {
+                requestBody.transGroup = transGroup;
+            }
+
+            // Send refund request to MoMo
+            const response = await this.sendMoMoRefundRequest(requestBody);
+
+            // Store refund record
+            await this.storeRefundRecord({
+                originalOrderId,
+                refundOrderId,
+                requestId,
+                amount,
+                transId,
+                description,
+                requestBody: JSON.stringify(requestBody),
+                response: JSON.stringify(response),
+            });
+
+            return {
+                success: response.resultCode === 0,
+                refundOrderId: refundOrderId,
+                requestId: requestId,
+                amount: amount,
+                transId: response.transId,
+                resultCode: response.resultCode,
+                message: response.message,
+                responseTime: response.responseTime,
+                transGroup: response.transGroup || [],
+            };
+        } catch (error) {
+            console.error('MoMo refund creation error:', error);
+            throw new InternalServerError('Failed to create MoMo refund');
+        }
+    }
+
+    /**
+     * Send refund request to MoMo API
+     * @param {Object} requestBody - Refund request body
+     * @returns {Promise<Object>} MoMo refund response
+     */
+    static async sendMoMoRefundRequest(requestBody) {
+        return new Promise((resolve, reject) => {
+            const requestBodyString = JSON.stringify(requestBody);
+
+            const options = {
+                hostname: 'test-payment.momo.vn',
+                port: 443,
+                path: '/v2/gateway/api/refund',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(requestBodyString),
+                },
+                timeout: 30000, // 30 second timeout as recommended by MoMo
+            };
+
+            const req = https.request(options, (res) => {
+                let data = '';
+
+                res.on('data', (chunk) => {
+                    data += chunk;
+                });
+
+                res.on('end', () => {
+                    try {
+                        const response = JSON.parse(data);
+                        resolve(response);
+                    } catch (error) {
+                        reject(
+                            new Error('Failed to parse MoMo refund response'),
+                        );
+                    }
+                });
+            });
+
+            req.on('error', (error) => {
+                reject(new Error(`Refund request error: ${error.message}`));
+            });
+
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Refund request timeout'));
+            });
+
+            req.write(requestBodyString);
+            req.end();
+        });
+    }
+
+    /**
+     * Query refund status from MoMo
+     * @param {string} refundOrderId - Refund order ID
+     * @param {string} requestId - Refund request ID
+     * @returns {Object} Refund status
+     */
+    static async queryRefundStatus(refundOrderId, requestId) {
+        try {
+            // Create raw signature string for query
+            const rawSignature = `accessKey=${momoConfig.accessKey}&orderId=${refundOrderId}&partnerCode=${momoConfig.partnerCode}&requestId=${requestId}`;
+
+            // Create signature
+            const signature = crypto
+                .createHmac('sha256', momoConfig.secretKey)
+                .update(rawSignature)
+                .digest('hex');
+
+            // Create request body
+            const requestBody = {
+                partnerCode: momoConfig.partnerCode,
+                requestId: requestId,
+                orderId: refundOrderId,
+                lang: momoConfig.lang,
+                signature: signature,
+            };
+
+            // Send query request to MoMo
+            const response = await this.sendMoMoRefundQuery(requestBody);
+
+            return {
+                success: response.resultCode === 0,
+                refundOrderId: response.orderId,
+                requestId: response.requestId,
+                resultCode: response.resultCode,
+                message: response.message,
+                responseTime: response.responseTime,
+                refundTrans: response.refundTrans || [],
+                items: response.items || [],
+            };
+        } catch (error) {
+            console.error('MoMo refund query error:', error);
+            throw new InternalServerError('Failed to query MoMo refund status');
+        }
+    }
+
+    /**
+     * Send refund query request to MoMo API
+     * @param {Object} requestBody - Query request body
+     * @returns {Promise<Object>} MoMo query response
+     */
+    static async sendMoMoRefundQuery(requestBody) {
+        return new Promise((resolve, reject) => {
+            const requestBodyString = JSON.stringify(requestBody);
+
+            const options = {
+                hostname: 'test-payment.momo.vn',
+                port: 443,
+                path: '/v2/gateway/api/refund/query',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(requestBodyString),
+                },
+                timeout: 30000, // 30 second timeout
+            };
+
+            const req = https.request(options, (res) => {
+                let data = '';
+
+                res.on('data', (chunk) => {
+                    data += chunk;
+                });
+
+                res.on('end', () => {
+                    try {
+                        const response = JSON.parse(data);
+                        resolve(response);
+                    } catch (error) {
+                        reject(
+                            new Error(
+                                'Failed to parse MoMo refund query response',
+                            ),
+                        );
+                    }
+                });
+            });
+
+            req.on('error', (error) => {
+                reject(new Error(`Refund query error: ${error.message}`));
+            });
+
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Refund query timeout'));
+            });
+
+            req.write(requestBodyString);
+            req.end();
+        });
+    }
+
+    /**
+     * Store refund record in database
+     * @param {Object} refundData - Refund data to store
+     */
+    static async storeRefundRecord(refundData) {
+        try {
+            // Create a new payment record for the refund
+            await database.Payment.create({
+                order_id: refundData.originalOrderId,
+                payment_method: 'momo_refund',
+                amount: -Math.abs(refundData.amount), // Negative amount for refunds
+                status: 'pending',
+                transaction_id: refundData.requestId,
+                gateway_response: JSON.stringify({
+                    type: 'refund',
+                    refundOrderId: refundData.refundOrderId,
+                    originalTransId: refundData.transId,
+                    requestBody: refundData.requestBody,
+                    response: refundData.response,
+                }),
+                created_at: new Date(),
+            });
+
+            console.log(
+                `Refund record stored for order ${refundData.originalOrderId}`,
+            );
+        } catch (error) {
+            console.error('Error storing refund record:', error);
+            // Don't throw error here to avoid breaking refund flow
+        }
+    }
+
+    /**
+     * Update refund record after processing
+     * @param {Object} updateData - Update data
+     */
+    static async updateRefundRecord(updateData) {
+        try {
+            const status = updateData.resultCode === 0 ? 'completed' : 'failed';
+
+            await database.Payment.update(
+                {
+                    status: status,
+                    gateway_response: JSON.stringify({
+                        type: 'refund',
+                        ...JSON.parse(updateData.gatewayResponse || '{}'),
+                        resultCode: updateData.resultCode,
+                        processedAt: new Date(),
+                    }),
+                    updated_at: new Date(),
+                },
+                {
+                    where: {
+                        transaction_id: updateData.requestId,
+                        payment_method: 'momo_refund',
+                    },
+                },
+            );
+
+            console.log(
+                `Refund record updated for request ${updateData.requestId}`,
+            );
+        } catch (error) {
+            console.error('Error updating refund record:', error);
+        }
+    }
+
+    /**
+     * Process full refund for an order
+     * @param {string} orderId - Original order ID
+     * @param {string} reason - Refund reason
+     * @returns {Object} Refund result
+     */
+    static async processFullRefund(orderId, reason = 'Order return') {
+        try {
+            // Get the original payment record
+            const originalPayment = await database.Payment.findOne({
+                where: {
+                    order_id: orderId,
+                    payment_method: 'momo',
+                    status: 'completed',
+                },
+                order: [['created_at', 'DESC']],
+            });
+
+            if (!originalPayment) {
+                throw new BadRequestError(
+                    'Original completed payment not found',
+                );
+            }
+
+            // Extract original transaction ID from gateway response
+            let originalTransId = null;
+            try {
+                const gatewayData = JSON.parse(
+                    originalPayment.gateway_response || '{}',
+                );
+                if (gatewayData.ipnData) {
+                    const ipnData = JSON.parse(gatewayData.ipnData);
+                    originalTransId = ipnData.transId;
+                } else if (gatewayData.transactionId) {
+                    originalTransId = gatewayData.transactionId;
+                }
+            } catch (parseError) {
+                console.error('Error parsing gateway response:', parseError);
+            }
+
+            if (!originalTransId) {
+                throw new BadRequestError('Original transaction ID not found');
+            }
+
+            // Generate new refund order ID
+            const refundOrderId = `REFUND_${orderId}_${new Date().getTime()}`;
+
+            // Create refund request
+            const refundResult = await this.createRefund({
+                originalOrderId: orderId,
+                refundOrderId: refundOrderId,
+                amount: Math.abs(originalPayment.amount), // Full amount
+                transId: originalTransId,
+                description: `Full refund: ${reason}`,
+            });
+
+            // Update order status if refund successful
+            if (refundResult.success) {
+                await this.updateOrderStatusForRefund(
+                    orderId,
+                    'refunded',
+                    reason,
+                );
+            }
+
+            return refundResult;
+        } catch (error) {
+            console.error('Error processing full refund:', error);
+            throw new InternalServerError('Failed to process full refund');
+        }
+    }
+
+    /**
+     * Process partial refund for an order
+     * @param {string} orderId - Original order ID
+     * @param {number} refundAmount - Amount to refund
+     * @param {string} reason - Refund reason
+     * @param {Array} items - Items to refund (optional)
+     * @returns {Object} Refund result
+     */
+    static async processPartialRefund(
+        orderId,
+        refundAmount,
+        reason = 'Partial return',
+        items = [],
+    ) {
+        try {
+            // Get the original payment record
+            const originalPayment = await database.Payment.findOne({
+                where: {
+                    order_id: orderId,
+                    payment_method: 'momo',
+                    status: 'completed',
+                },
+                order: [['created_at', 'DESC']],
+            });
+
+            if (!originalPayment) {
+                throw new BadRequestError(
+                    'Original completed payment not found',
+                );
+            }
+
+            // Validate refund amount
+            if (refundAmount > Math.abs(originalPayment.amount)) {
+                throw new BadRequestError(
+                    'Refund amount cannot exceed original payment amount',
+                );
+            }
+
+            // Get total already refunded
+            const totalRefunded = await this.getTotalRefundedAmount(orderId);
+            if (
+                refundAmount + totalRefunded >
+                Math.abs(originalPayment.amount)
+            ) {
+                throw new BadRequestError(
+                    'Total refund amount would exceed original payment',
+                );
+            }
+
+            // Extract original transaction ID
+            let originalTransId = null;
+            try {
+                const gatewayData = JSON.parse(
+                    originalPayment.gateway_response || '{}',
+                );
+                if (gatewayData.ipnData) {
+                    const ipnData = JSON.parse(gatewayData.ipnData);
+                    originalTransId = ipnData.transId;
+                } else if (gatewayData.transactionId) {
+                    originalTransId = gatewayData.transactionId;
+                }
+            } catch (parseError) {
+                console.error('Error parsing gateway response:', parseError);
+            }
+
+            if (!originalTransId) {
+                throw new BadRequestError('Original transaction ID not found');
+            }
+
+            // Generate new refund order ID
+            const refundOrderId = `REFUND_${orderId}_${new Date().getTime()}`;
+
+            // Prepare transGroup for itemized refunds
+            let transGroup = [];
+            if (items && items.length > 0) {
+                transGroup = items.map((item) => ({
+                    itemId: item.itemId || item.productId,
+                    amount: item.amount,
+                    transId: originalTransId, // Use original transaction ID
+                }));
+            }
+
+            // Create refund request
+            const refundResult = await this.createRefund({
+                originalOrderId: orderId,
+                refundOrderId: refundOrderId,
+                amount: refundAmount,
+                transId: originalTransId,
+                description: `Partial refund: ${reason}`,
+                transGroup: transGroup,
+            });
+
+            // Update order status if refund successful
+            if (refundResult.success) {
+                const newTotalRefunded = totalRefunded + refundAmount;
+                const isFullyRefunded =
+                    newTotalRefunded >= Math.abs(originalPayment.amount);
+
+                await this.updateOrderStatusForRefund(
+                    orderId,
+                    isFullyRefunded ? 'refunded' : 'partially_refunded',
+                    reason,
+                );
+            }
+
+            return refundResult;
+        } catch (error) {
+            console.error('Error processing partial refund:', error);
+            throw new InternalServerError('Failed to process partial refund');
+        }
+    }
+
+    /**
+     * Get total refunded amount for an order
+     * @param {string} orderId - Order ID
+     * @returns {number} Total refunded amount
+     */
+    static async getTotalRefundedAmount(orderId) {
+        try {
+            const refunds = await database.Payment.findAll({
+                where: {
+                    order_id: orderId,
+                    payment_method: 'momo_refund',
+                    status: 'completed',
+                },
+            });
+
+            return refunds.reduce((total, refund) => {
+                return total + Math.abs(refund.amount);
+            }, 0);
+        } catch (error) {
+            console.error('Error getting total refunded amount:', error);
+            return 0;
+        }
+    }
+
+    /**
+     * Update order status for refund
+     * @param {string} orderId - Order ID
+     * @param {string} refundStatus - Refund status
+     * @param {string} reason - Refund reason
+     */
+    static async updateOrderStatusForRefund(orderId, refundStatus, reason) {
+        try {
+            const updateData = {
+                status:
+                    refundStatus === 'refunded'
+                        ? 'returned'
+                        : 'partially_returned',
+                note: `Refund processed: ${reason} at ${new Date().toLocaleString('vi-VN')}`,
+                updated_at: new Date(),
+            };
+
+            await database.Order.update(updateData, {
+                where: { id: orderId },
+            });
+
+            console.log(
+                `Order ${orderId} status updated to ${updateData.status}`,
+            );
+        } catch (error) {
+            console.error('Error updating order status for refund:', error);
+        }
+    }
+
+    /**
+     * Get refund history for an order
+     * @param {string} orderId - Order ID
+     * @returns {Array} Refund history
+     */
+    static async getRefundHistory(orderId) {
+        try {
+            const refunds = await database.Payment.findAll({
+                where: {
+                    order_id: orderId,
+                    payment_method: 'momo_refund',
+                },
+                order: [['created_at', 'DESC']],
+            });
+
+            return refunds.map((refund) => {
+                let gatewayData = {};
+                try {
+                    gatewayData = JSON.parse(refund.gateway_response || '{}');
+                } catch (parseError) {
+                    console.error(
+                        'Error parsing refund gateway response:',
+                        parseError,
+                    );
+                }
+
+                return {
+                    id: refund.id,
+                    amount: Math.abs(refund.amount),
+                    status: refund.status,
+                    transactionId: refund.transaction_id,
+                    refundOrderId: gatewayData.refundOrderId,
+                    createdAt: refund.created_at,
+                    updatedAt: refund.updated_at,
+                };
+            });
+        } catch (error) {
+            console.error('Error getting refund history:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Create MoMo refund request
+     * @param {Object} refundData - Refund data
+     * @param {string} refundData.originalOrderId - Original order ID that was paid
+     * @param {string} refundData.refundOrderId - New order ID for refund (must be different from original)
+     * @param {number} refundData.amount - Amount to refund
+     * @param {string} refundData.transId - Original MoMo transaction ID
+     * @param {string} refundData.description - Refund description
+     * @param {Array} refundData.transGroup - Items to refund (optional for itemized refunds)
+     * @returns {Object} Refund response
+     */
+    static async createRefund({
+        originalOrderId,
+        refundOrderId,
+        amount,
+        transId,
+        description = 'Refund order',
+        transGroup = [],
+    }) {
+        try {
+            // Validate input
+            if (!originalOrderId || !refundOrderId || !amount || !transId) {
+                throw new BadRequestError('Required refund parameters missing');
+            }
+
+            // Generate request ID for refund
+            const requestId = `REF_${refundOrderId}_${new Date().getTime()}`;
+
+            // Create raw signature string for refund
+            const rawSignature = `accessKey=${momoConfig.accessKey}&amount=${amount}&description=${description}&orderId=${refundOrderId}&partnerCode=${momoConfig.partnerCode}&requestId=${requestId}&transId=${transId}`;
+
+            // Create signature
+            const signature = crypto
+                .createHmac('sha256', momoConfig.secretKey)
+                .update(rawSignature)
+                .digest('hex');
+
+            // Create request body
+            const requestBody = {
+                partnerCode: momoConfig.partnerCode,
+                orderId: refundOrderId,
+                requestId: requestId,
+                amount: amount,
+                transId: transId,
+                lang: momoConfig.lang,
+                description: description,
+                signature: signature,
+            };
+
+            // Add transGroup if provided (for itemized refunds)
+            if (transGroup && transGroup.length > 0) {
+                requestBody.transGroup = transGroup;
+            }
+
+            // Send refund request to MoMo
+            const response = await this.sendMoMoRefundRequest(requestBody);
+
+            // Store refund record
+            await this.storeRefundRecord({
+                originalOrderId,
+                refundOrderId,
+                requestId,
+                amount,
+                transId,
+                description,
+                requestBody: JSON.stringify(requestBody),
+                response: JSON.stringify(response),
+            });
+
+            return {
+                success: response.resultCode === 0,
+                refundOrderId: refundOrderId,
+                requestId: requestId,
+                amount: amount,
+                transId: response.transId,
+                resultCode: response.resultCode,
+                message: response.message,
+                responseTime: response.responseTime,
+                transGroup: response.transGroup || [],
+            };
+        } catch (error) {
+            console.error('MoMo refund creation error:', error);
+            throw new InternalServerError('Failed to create MoMo refund');
+        }
+    }
+
+    /**
+     * Send refund request to MoMo API
+     * @param {Object} requestBody - Refund request body
+     * @returns {Promise<Object>} MoMo refund response
+     */
+    static async sendMoMoRefundRequest(requestBody) {
+        return new Promise((resolve, reject) => {
+            const requestBodyString = JSON.stringify(requestBody);
+
+            const options = {
+                hostname: 'test-payment.momo.vn',
+                port: 443,
+                path: '/v2/gateway/api/refund',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(requestBodyString),
+                },
+                timeout: 30000, // 30 second timeout as recommended by MoMo
+            };
+
+            const req = https.request(options, (res) => {
+                let data = '';
+
+                res.on('data', (chunk) => {
+                    data += chunk;
+                });
+
+                res.on('end', () => {
+                    try {
+                        const response = JSON.parse(data);
+                        resolve(response);
+                    } catch (error) {
+                        reject(
+                            new Error('Failed to parse MoMo refund response'),
+                        );
+                    }
+                });
+            });
+
+            req.on('error', (error) => {
+                reject(new Error(`Refund request error: ${error.message}`));
+            });
+
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Refund request timeout'));
+            });
+
+            req.write(requestBodyString);
+            req.end();
+        });
+    }
+
+    /**
+     * Query refund status from MoMo
+     * @param {string} refundOrderId - Refund order ID
+     * @param {string} requestId - Refund request ID
+     * @returns {Object} Refund status
+     */
+    static async queryRefundStatus(refundOrderId, requestId) {
+        try {
+            // Create raw signature string for query
+            const rawSignature = `accessKey=${momoConfig.accessKey}&orderId=${refundOrderId}&partnerCode=${momoConfig.partnerCode}&requestId=${requestId}`;
+
+            // Create signature
+            const signature = crypto
+                .createHmac('sha256', momoConfig.secretKey)
+                .update(rawSignature)
+                .digest('hex');
+
+            // Create request body
+            const requestBody = {
+                partnerCode: momoConfig.partnerCode,
+                requestId: requestId,
+                orderId: refundOrderId,
+                lang: momoConfig.lang,
+                signature: signature,
+            };
+
+            // Send query request to MoMo
+            const response = await this.sendMoMoRefundQuery(requestBody);
+
+            return {
+                success: response.resultCode === 0,
+                refundOrderId: response.orderId,
+                requestId: response.requestId,
+                resultCode: response.resultCode,
+                message: response.message,
+                responseTime: response.responseTime,
+                refundTrans: response.refundTrans || [],
+                items: response.items || [],
+            };
+        } catch (error) {
+            console.error('MoMo refund query error:', error);
+            throw new InternalServerError('Failed to query MoMo refund status');
+        }
+    }
+
+    /**
+     * Send refund query request to MoMo API
+     * @param {Object} requestBody - Query request body
+     * @returns {Promise<Object>} MoMo query response
+     */
+    static async sendMoMoRefundQuery(requestBody) {
+        return new Promise((resolve, reject) => {
+            const requestBodyString = JSON.stringify(requestBody);
+
+            const options = {
+                hostname: 'test-payment.momo.vn',
+                port: 443,
+                path: '/v2/gateway/api/refund/query',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(requestBodyString),
+                },
+                timeout: 30000, // 30 second timeout
+            };
+
+            const req = https.request(options, (res) => {
+                let data = '';
+
+                res.on('data', (chunk) => {
+                    data += chunk;
+                });
+
+                res.on('end', () => {
+                    try {
+                        const response = JSON.parse(data);
+                        resolve(response);
+                    } catch (error) {
+                        reject(
+                            new Error(
+                                'Failed to parse MoMo refund query response',
+                            ),
+                        );
+                    }
+                });
+            });
+
+            req.on('error', (error) => {
+                reject(new Error(`Refund query error: ${error.message}`));
+            });
+
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Refund query timeout'));
+            });
+
+            req.write(requestBodyString);
+            req.end();
+        });
+    }
+
+    /**
+     * Store refund record in database
+     * @param {Object} refundData - Refund data to store
+     */
+    static async storeRefundRecord(refundData) {
+        try {
+            // Create a new payment record for the refund
+            await database.Payment.create({
+                order_id: refundData.originalOrderId,
+                payment_method: 'momo_refund',
+                amount: -Math.abs(refundData.amount), // Negative amount for refunds
+                status: 'pending',
+                transaction_id: refundData.requestId,
+                gateway_response: JSON.stringify({
+                    type: 'refund',
+                    refundOrderId: refundData.refundOrderId,
+                    originalTransId: refundData.transId,
+                    requestBody: refundData.requestBody,
+                    response: refundData.response,
+                }),
+                created_at: new Date(),
+            });
+
+            console.log(
+                `Refund record stored for order ${refundData.originalOrderId}`,
+            );
+        } catch (error) {
+            console.error('Error storing refund record:', error);
+            // Don't throw error here to avoid breaking refund flow
+        }
+    }
+
+    /**
+     * Update refund record after processing
+     * @param {Object} updateData - Update data
+     */
+    static async updateRefundRecord(updateData) {
+        try {
+            const status = updateData.resultCode === 0 ? 'completed' : 'failed';
+
+            await database.Payment.update(
+                {
+                    status: status,
+                    gateway_response: JSON.stringify({
+                        type: 'refund',
+                        ...JSON.parse(updateData.gatewayResponse || '{}'),
+                        resultCode: updateData.resultCode,
+                        processedAt: new Date(),
+                    }),
+                    updated_at: new Date(),
+                },
+                {
+                    where: {
+                        transaction_id: updateData.requestId,
+                        payment_method: 'momo_refund',
+                    },
+                },
+            );
+
+            console.log(
+                `Refund record updated for request ${updateData.requestId}`,
+            );
+        } catch (error) {
+            console.error('Error updating refund record:', error);
+        }
+    }
+
+    /**
+     * Process full refund for an order
+     * @param {string} orderId - Original order ID
+     * @param {string} reason - Refund reason
+     * @returns {Object} Refund result
+     */
+    static async processFullRefund(orderId, reason = 'Order return') {
+        try {
+            // Get the original payment record
+            const originalPayment = await database.Payment.findOne({
+                where: {
+                    order_id: orderId,
+                    payment_method: 'momo',
+                    status: 'completed',
+                },
+                order: [['created_at', 'DESC']],
+            });
+
+            if (!originalPayment) {
+                throw new BadRequestError(
+                    'Original completed payment not found',
+                );
+            }
+
+            // Extract original transaction ID from gateway response
+            let originalTransId = null;
+            try {
+                const gatewayData = JSON.parse(
+                    originalPayment.gateway_response || '{}',
+                );
+                if (gatewayData.ipnData) {
+                    const ipnData = JSON.parse(gatewayData.ipnData);
+                    originalTransId = ipnData.transId;
+                } else if (gatewayData.transactionId) {
+                    originalTransId = gatewayData.transactionId;
+                }
+            } catch (parseError) {
+                console.error('Error parsing gateway response:', parseError);
+            }
+
+            if (!originalTransId) {
+                throw new BadRequestError('Original transaction ID not found');
+            }
+
+            // Generate new refund order ID
+            const refundOrderId = `REFUND_${orderId}_${new Date().getTime()}`;
+
+            // Create refund request
+            const refundResult = await this.createRefund({
+                originalOrderId: orderId,
+                refundOrderId: refundOrderId,
+                amount: Math.abs(originalPayment.amount), // Full amount
+                transId: originalTransId,
+                description: `Full refund: ${reason}`,
+            });
+
+            // Update order status if refund successful
+            if (refundResult.success) {
+                await this.updateOrderStatusForRefund(
+                    orderId,
+                    'refunded',
+                    reason,
+                );
+            }
+
+            return refundResult;
+        } catch (error) {
+            console.error('Error processing full refund:', error);
+            throw new InternalServerError('Failed to process full refund');
+        }
+    }
+
+    /**
+     * Process partial refund for an order
+     * @param {string} orderId - Original order ID
+     * @param {number} refundAmount - Amount to refund
+     * @param {string} reason - Refund reason
+     * @param {Array} items - Items to refund (optional)
+     * @returns {Object} Refund result
+     */
+    static async processPartialRefund(
+        orderId,
+        refundAmount,
+        reason = 'Partial return',
+        items = [],
+    ) {
+        try {
+            // Get the original payment record
+            const originalPayment = await database.Payment.findOne({
+                where: {
+                    order_id: orderId,
+                    payment_method: 'momo',
+                    status: 'completed',
+                },
+                order: [['created_at', 'DESC']],
+            });
+
+            if (!originalPayment) {
+                throw new BadRequestError(
+                    'Original completed payment not found',
+                );
+            }
+
+            // Validate refund amount
+            if (refundAmount > Math.abs(originalPayment.amount)) {
+                throw new BadRequestError(
+                    'Refund amount cannot exceed original payment amount',
+                );
+            }
+
+            // Get total already refunded
+            const totalRefunded = await this.getTotalRefundedAmount(orderId);
+            if (
+                refundAmount + totalRefunded >
+                Math.abs(originalPayment.amount)
+            ) {
+                throw new BadRequestError(
+                    'Total refund amount would exceed original payment',
+                );
+            }
+
+            // Extract original transaction ID
+            let originalTransId = null;
+            try {
+                const gatewayData = JSON.parse(
+                    originalPayment.gateway_response || '{}',
+                );
+                if (gatewayData.ipnData) {
+                    const ipnData = JSON.parse(gatewayData.ipnData);
+                    originalTransId = ipnData.transId;
+                } else if (gatewayData.transactionId) {
+                    originalTransId = gatewayData.transactionId;
+                }
+            } catch (parseError) {
+                console.error('Error parsing gateway response:', parseError);
+            }
+
+            if (!originalTransId) {
+                throw new BadRequestError('Original transaction ID not found');
+            }
+
+            // Generate new refund order ID
+            const refundOrderId = `REFUND_${orderId}_${new Date().getTime()}`;
+
+            // Prepare transGroup for itemized refunds
+            let transGroup = [];
+            if (items && items.length > 0) {
+                transGroup = items.map((item) => ({
+                    itemId: item.itemId || item.productId,
+                    amount: item.amount,
+                    transId: originalTransId, // Use original transaction ID
+                }));
+            }
+
+            // Create refund request
+            const refundResult = await this.createRefund({
+                originalOrderId: orderId,
+                refundOrderId: refundOrderId,
+                amount: refundAmount,
+                transId: originalTransId,
+                description: `Partial refund: ${reason}`,
+                transGroup: transGroup,
+            });
+
+            // Update order status if refund successful
+            if (refundResult.success) {
+                const newTotalRefunded = totalRefunded + refundAmount;
+                const isFullyRefunded =
+                    newTotalRefunded >= Math.abs(originalPayment.amount);
+
+                await this.updateOrderStatusForRefund(
+                    orderId,
+                    isFullyRefunded ? 'refunded' : 'partially_refunded',
+                    reason,
+                );
+            }
+
+            return refundResult;
+        } catch (error) {
+            console.error('Error processing partial refund:', error);
+            throw new InternalServerError('Failed to process partial refund');
+        }
+    }
+
+    /**
+     * Get total refunded amount for an order
+     * @param {string} orderId - Order ID
+     * @returns {number} Total refunded amount
+     */
+    static async getTotalRefundedAmount(orderId) {
+        try {
+            const refunds = await database.Payment.findAll({
+                where: {
+                    order_id: orderId,
+                    payment_method: 'momo_refund',
+                    status: 'completed',
+                },
+            });
+
+            return refunds.reduce((total, refund) => {
+                return total + Math.abs(refund.amount);
+            }, 0);
+        } catch (error) {
+            console.error('Error getting total refunded amount:', error);
+            return 0;
+        }
+    }
+
+    /**
+     * Update order status for refund
+     * @param {string} orderId - Order ID
+     * @param {string} refundStatus - Refund status
+     * @param {string} reason - Refund reason
+     */
+    static async updateOrderStatusForRefund(orderId, refundStatus, reason) {
+        try {
+            const updateData = {
+                status:
+                    refundStatus === 'refunded'
+                        ? 'returned'
+                        : 'partially_returned',
+                note: `Refund processed: ${reason} at ${new Date().toLocaleString('vi-VN')}`,
+                updated_at: new Date(),
+            };
+
+            await database.Order.update(updateData, {
+                where: { id: orderId },
+            });
+
+            console.log(
+                `Order ${orderId} status updated to ${updateData.status}`,
+            );
+        } catch (error) {
+            console.error('Error updating order status for refund:', error);
+        }
+    }
+
+    /**
+     * Get refund history for an order
+     * @param {string} orderId - Order ID
+     * @returns {Array} Refund history
+     */
+    static async getRefundHistory(orderId) {
+        try {
+            const refunds = await database.Payment.findAll({
+                where: {
+                    order_id: orderId,
+                    payment_method: 'momo_refund',
+                },
+                order: [['created_at', 'DESC']],
+            });
+
+            return refunds.map((refund) => {
+                let gatewayData = {};
+                try {
+                    gatewayData = JSON.parse(refund.gateway_response || '{}');
+                } catch (parseError) {
+                    console.error(
+                        'Error parsing refund gateway response:',
+                        parseError,
+                    );
+                }
+
+                return {
+                    id: refund.id,
+                    amount: Math.abs(refund.amount),
+                    status: refund.status,
+                    transactionId: refund.transaction_id,
+                    refundOrderId: gatewayData.refundOrderId,
+                    createdAt: refund.created_at,
+                    updatedAt: refund.updated_at,
+                };
+            });
+        } catch (error) {
+            console.error('Error getting refund history:', error);
+            return [];
+        }
+    }
 }
 
 module.exports = MomoPaymentService;

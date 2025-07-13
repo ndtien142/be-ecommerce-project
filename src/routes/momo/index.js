@@ -134,7 +134,6 @@ router.get('/status/:orderId', asyncHandler(momoController.getPaymentStatus));
  */
 router.post('/verify-signature', asyncHandler(momoController.verifySignature));
 
-
 // Payment expiration management routes
 /**
  * @swagger
@@ -155,7 +154,11 @@ router.post('/verify-signature', asyncHandler(momoController.verifySignature));
  *       200:
  *         description: Payment expiration status retrieved successfully
  */
-router.get('/expiration/:orderId', authenticationV2, asyncHandler(momoController.getPaymentExpirationStatus));
+router.get(
+    '/expiration/:orderId',
+    authenticationV2,
+    asyncHandler(momoController.getPaymentExpirationStatus),
+);
 
 /**
  * @swagger
@@ -169,7 +172,11 @@ router.get('/expiration/:orderId', authenticationV2, asyncHandler(momoController
  *       200:
  *         description: Expired payments processed successfully
  */
-router.post('/check-expired', authenticationV2, asyncHandler(momoController.checkExpiredPayments));
+router.post(
+    '/check-expired',
+    authenticationV2,
+    asyncHandler(momoController.checkExpiredPayments),
+);
 
 /**
  * @swagger
@@ -201,6 +208,13 @@ router.post('/check-expired', authenticationV2, asyncHandler(momoController.chec
  *       200:
  *         description: Payment cancelled successfully
  */
-router.post('/cancel/:orderId', authenticationV2, asyncHandler(momoController.cancelPayment));
+router.post(
+    '/cancel/:orderId',
+    authenticationV2,
+    asyncHandler(momoController.cancelPayment),
+);
+
+// Include refund routes
+router.use('/refund', require('./refund'));
 
 module.exports = router;

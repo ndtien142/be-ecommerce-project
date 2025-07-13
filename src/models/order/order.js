@@ -32,7 +32,10 @@ module.exports = (sequelize) => {
                 'pending_pickup', // Chờ lấy hàng
                 'shipping', // Chờ giao hàng
                 'delivered', // Đã giao
-                'returned', // Trả hàng
+                'returned', // Trả hàng (hoàn toàn)
+                'partially_returned', // Trả hàng một phần
+                'refunded', // Đã hoàn tiền
+                'partially_refunded', // Hoàn tiền một phần
                 'cancelled', // Đã hủy
             ),
             allowNull: false,
