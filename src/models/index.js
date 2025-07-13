@@ -236,7 +236,7 @@ database.User.hasMany(database.Order, {
     as: 'orders',
 });
 
-// Order & PaymentMethod
+// Order & Payment
 database.Order.belongsTo(database.Payment, {
     foreignKey: 'payment_id',
     as: 'payment',
@@ -264,16 +264,6 @@ database.CustomerPaymentOption.belongsTo(database.User, {
 database.User.hasMany(database.CustomerPaymentOption, {
     foreignKey: 'user_id',
     as: 'customerPaymentOptions',
-});
-
-// Payment & PaymentMethod
-database.Payment.belongsTo(database.PaymentMethod, {
-    foreignKey: 'payment_method_id',
-    as: 'paymentMethod',
-});
-database.PaymentMethod.hasMany(database.Payment, {
-    foreignKey: 'payment_method_id',
-    as: 'payments',
 });
 
 // Order & ShippingMethod
