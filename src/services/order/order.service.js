@@ -3,6 +3,7 @@
 const { BadRequestError, NotFoundError } = require('../../core/error.response');
 const database = require('../../models');
 const { toCamel } = require('../../utils/common.utils');
+const MomoPaymentService = require('../payment/momo.service');
 
 class OrderService {
     static async createOrder({
@@ -405,6 +406,209 @@ class OrderService {
             });
         }
         return toCamel(result);
+    }
+
+    /**
+     * Create order with MoMo payment
+     */
+    static async createOrderWithMoMo({
+        userId,
+        cart,
+        addressId,
+        shippingMethodId,
+        note,
+        shippingFee = 0,
+        orderInfo = 'Thanh toán đơn hàng',
+        extraData = '',
+    }) {
+        // Validate required fields
+        if (!userId) throw new BadRequestError('userId là bắt buộc');
+        if (
+            !cart ||
+            !Array.isArray(cart.lineItems) ||
+            cart.lineItems.length === 0
+        )
+            throw new BadRequestError('cart với lineItems là bắt buộc');
+        if (!addressId) throw new BadRequestError('addressId là bắt buộc');
+        if (!shippingMethodId)
+            throw new BadRequestError('shippingMethodId là bắt buộc');
+
+        // Fetch active cart from BE and compare with FE cart
+        const beCart = await database.Cart.findOne({
+            where: { id: cart.id, user_id: userId, status: 'active' },
+            include: [{ model: database.CartLineItem, as: 'lineItems' }],
+        });
+        if (!beCart) throw new NotFoundError('Active cart not found');
+
+        // Compare FE cart.lineItems with BE cart.lineItems
+        const feItems = cart.lineItems.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            price: Number(item.price),
+        }));
+        const beItems = (beCart.lineItems || []).map((item) => ({
+            productId: item.product_id,
+            quantity: item.quantity,
+            price: Number(item.price),
+        }));
+
+        if (
+            feItems.length !== beItems.length ||
+            !feItems.every((feItem) =>
+                beItems.some(
+                    (beItem) =>
+                        beItem.productId === feItem.productId &&
+                        beItem.quantity === feItem.quantity &&
+                        Number(beItem.price) === Number(feItem.price),
+                ),
+            )
+        ) {
+            throw new BadRequestError(
+                'Các mục trong giỏ hàng không khớp với giỏ hàng trên máy chủ',
+            );
+        }
+
+        // Calculate total amount
+        const totalAmount =
+            beCart.lineItems.reduce(
+                (sum, item) => sum + Number(item.total),
+                0,
+            ) + Number(shippingFee);
+
+        // Start transaction
+        const transaction = await database.sequelize.transaction();
+        try {
+            // Create order
+            const order = await database.Order.create(
+                {
+                    user_id: userId,
+                    address_id: addressId,
+                    payment_id: null, // will update after payment created
+                    status: 'pending_payment', // Changed status for payment pending
+                    total_amount: totalAmount,
+                    note,
+                    ordered_date: new Date(),
+                    shipping_method_id: shippingMethodId,
+                    shipping_fee: shippingFee,
+                },
+                { transaction },
+            );
+
+            // Create order line items (but don't update stock yet - wait for payment)
+            for (const item of beCart.lineItems) {
+                await database.OrderLineItem.create(
+                    {
+                        order_id: order.id,
+                        product_id: item.product_id,
+                        quantity: item.quantity,
+                        price: item.price,
+                        total: item.total,
+                    },
+                    { transaction },
+                );
+            }
+
+            // Create payment record
+            const payment = await database.Payment.create(
+                {
+                    order_id: order.id,
+                    payment_method: 'momo',
+                    amount: totalAmount,
+                    status: 'pending',
+                },
+                { transaction },
+            );
+            order.payment_id = payment.id;
+            await order.save({ transaction });
+
+            // Create MoMo payment first, before committing transaction
+            // Generate unique MoMo order ID to avoid duplicates
+            const momoOrderId = `ORDER_${order.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+            const momoPayment = await MomoPaymentService.createPayment({
+                orderId: momoOrderId,
+                amount: Math.round(totalAmount), // MoMo requires integer amount
+                orderInfo: orderInfo,
+                extraData: extraData,
+                internalOrderId: order.id.toString(), // Pass internal order ID for mapping
+            });
+
+            // Only commit transaction after MoMo payment is successfully created
+            await transaction.commit();
+
+            return {
+                order: toCamel(order.toJSON()),
+                payment: toCamel(payment.toJSON()),
+                momoPayment: momoPayment,
+            };
+        } catch (error) {
+            // Only rollback if transaction hasn't been committed yet
+            if (!transaction.finished) {
+                await transaction.rollback();
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Complete order after successful payment
+     */
+    static async completeOrderPayment(orderId) {
+        const transaction = await database.sequelize.transaction();
+        try {
+            // Get order with line items
+            const order = await database.Order.findOne({
+                where: { id: orderId },
+                include: [{ model: database.OrderLineItem, as: 'lineItems' }],
+                transaction,
+            });
+
+            if (!order) throw new NotFoundError('Order not found');
+
+            // Update product stock and sold
+            for (const item of order.lineItems) {
+                const product = await database.Product.findByPk(
+                    item.product_id,
+                    { transaction },
+                );
+                if (product) {
+                    product.stock =
+                        Number(product.stock) - Number(item.quantity);
+                    product.sold =
+                        Number(product.sold || 0) + Number(item.quantity);
+
+                    if (product.stock <= 0) {
+                        product.inventory_type = 'out_of_stock';
+                        product.stock = 0;
+                    } else if (product.stock <= (product.min_stock || 0)) {
+                        product.inventory_type = 'low_stock';
+                    } else {
+                        product.inventory_type = 'in_stock';
+                    }
+                    await product.save({ transaction });
+                }
+            }
+
+            // Update order status
+            order.status = 'pending_confirmation';
+            await order.save({ transaction });
+
+            // Set cart status to 'ordered'
+            const cart = await database.Cart.findOne({
+                where: { user_id: order.user_id, status: 'active' },
+                transaction,
+            });
+            if (cart) {
+                cart.status = 'ordered';
+                await cart.save({ transaction });
+            }
+
+            await transaction.commit();
+            return toCamel(order.toJSON());
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
     }
 }
 

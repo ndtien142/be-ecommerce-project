@@ -310,6 +310,7 @@ router.use(authenticationV2);
 
 // User routes
 router.post('/', asyncHandler(orderController.createOrder));
+router.post('/momo', asyncHandler(orderController.createOrderWithMoMo));
 router.get('/user', asyncHandler(orderController.getOrdersByUser));
 router.get(
     '/user/analytics/count-by-status',

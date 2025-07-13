@@ -82,6 +82,20 @@ class OrderController {
             metadata: await OrderService.countOrdersByStatusForAdmin(),
         }).send(res);
     };
+
+    /**
+     * Create order with MoMo payment
+     */
+    createOrderWithMoMo = async (req, res, next) => {
+        const userId = req.user?.userId || req.headers['x-user-id'];
+        new CREATED({
+            message: 'Tạo đơn hàng với thanh toán MoMo thành công',
+            metadata: await OrderService.createOrderWithMoMo({
+                ...req.body,
+                userId,
+            }),
+        }).send(res);
+    };
 }
 
 module.exports = new OrderController();

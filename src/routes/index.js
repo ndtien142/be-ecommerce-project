@@ -15,6 +15,7 @@ router.use('/v1/api/cart', require('./cart'));
 router.use('/v1/api/address', require('./address'));
 router.use('/v1/api/shipping-method', require('./shipping-method'));
 router.use('/v1/api/payment-method', require('./payment-method'));
+router.use('/v1/api/momo', require('./momo'));
 router.use('/v1/api/notification', require('./notification'));
 router.use('/v1/api/order', require('./order'));
 router.use('/v1/api/job', require('./job'));
