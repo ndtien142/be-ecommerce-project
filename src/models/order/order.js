@@ -26,6 +26,8 @@ module.exports = (sequelize) => {
             type: DataTypes.ENUM(
                 'pending_payment', // Chờ thanh toán (for MoMo)
                 'payment_failed', // Thanh toán thất bại
+                'payment_expired', // Thanh toán hết hạn
+                'payment_cancelled', // Thanh toán bị hủy
                 'pending_confirmation', // Chờ xác nhận
                 'pending_pickup', // Chờ lấy hàng
                 'shipping', // Chờ giao hàng

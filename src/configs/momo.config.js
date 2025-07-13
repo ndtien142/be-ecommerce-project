@@ -17,6 +17,12 @@ const config = {
     lang: 'vi',
     autoCapture: true,
     orderGroupId: '',
+
+    // Payment expiration settings
+    paymentExpirationMinutes:
+        parseInt(process.env.MOMO_PAYMENT_EXPIRATION_MINUTES) || 15, // Default 15 minutes
+    orderExpirationMinutes:
+        parseInt(process.env.MOMO_ORDER_EXPIRATION_MINUTES) || 30, // Default 30 minutes for cleanup
 };
 
 module.exports = config;

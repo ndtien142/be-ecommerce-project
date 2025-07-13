@@ -28,6 +28,7 @@ module.exports = (sequelize) => {
                     'completed',
                     'failed',
                     'cancelled',
+                    'expired',
                 ),
                 allowNull: false,
                 defaultValue: 'pending',

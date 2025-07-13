@@ -134,4 +134,73 @@ router.get('/status/:orderId', asyncHandler(momoController.getPaymentStatus));
  */
 router.post('/verify-signature', asyncHandler(momoController.verifySignature));
 
+
+// Payment expiration management routes
+/**
+ * @swagger
+ * /momo/expiration/{orderId}:
+ *   get:
+ *     summary: Get payment expiration status
+ *     tags: [MoMo Payment]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Order ID
+ *     responses:
+ *       200:
+ *         description: Payment expiration status retrieved successfully
+ */
+router.get('/expiration/:orderId', authenticationV2, asyncHandler(momoController.getPaymentExpirationStatus));
+
+/**
+ * @swagger
+ * /momo/check-expired:
+ *   post:
+ *     summary: Check and process expired payments (Admin only)
+ *     tags: [MoMo Payment]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Expired payments processed successfully
+ */
+router.post('/check-expired', authenticationV2, asyncHandler(momoController.checkExpiredPayments));
+
+/**
+ * @swagger
+ * /momo/cancel/{orderId}:
+ *   post:
+ *     summary: Cancel pending payment
+ *     tags: [MoMo Payment]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Order ID
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 description: Cancellation reason
+ *                 example: "User requested cancellation"
+ *     responses:
+ *       200:
+ *         description: Payment cancelled successfully
+ */
+router.post('/cancel/:orderId', authenticationV2, asyncHandler(momoController.cancelPayment));
+
 module.exports = router;

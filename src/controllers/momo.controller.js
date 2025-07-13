@@ -98,6 +98,41 @@ class MomoPaymentController {
             metadata: { isValid },
         }).send(res);
     };
+
+    /**
+     * Check payment timeout status
+     */
+    getPaymentExpirationStatus = async (req, res, next) => {
+        const { orderId } = req.params;
+
+        new SuccessResponse({
+            message: 'Lấy trạng thái hết hạn thanh toán thành công',
+            metadata: await MomoPaymentService.getPaymentTimeoutStatus(orderId),
+        }).send(res);
+    };
+
+    /**
+     * Check and process expired payments (admin/system endpoint)
+     */
+    checkExpiredPayments = async (req, res, next) => {
+        new SuccessResponse({
+            message: 'Kiểm tra thanh toán hết hạn thành công',
+            metadata: await MomoPaymentService.checkExpiredPayments(),
+        }).send(res);
+    };
+
+    /**
+     * Cancel pending payment
+     */
+    cancelPayment = async (req, res, next) => {
+        const { orderId } = req.params;
+        const { reason } = req.body;
+
+        new SuccessResponse({
+            message: 'Hủy thanh toán thành công',
+            metadata: await MomoPaymentService.cancelPayment(orderId, reason),
+        }).send(res);
+    };
 }
 
 module.exports = new MomoPaymentController();
