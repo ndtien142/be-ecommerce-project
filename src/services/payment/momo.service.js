@@ -8,24 +8,47 @@ const {
     InternalServerError,
 } = require('../../core/error.response');
 const database = require('../../models');
+const {
+    MOMO_RESULT_CODES,
+    MOMO_PAYMENT_STATUS,
+    ORDER_STATUS,
+    CART_STATUS,
+    MOMO_ENDPOINTS,
+    MOMO_REQUEST_TYPES,
+} = require('../../common/momo.constants');
 
 class MomoPaymentService {
+    // ===============================
+    // MAIN FUNCTION 1: CREATE PAYMENT
+    // ===============================
     /**
-     * Create MoMo payment request
+     * Create MoMo payment and update cart status
      * @param {Object} paymentData - Payment data
-     * @param {string} paymentData.orderId - MoMo Order ID (can be different from internal order ID)
+     * @param {string} paymentData.orderId - Order ID (will be used as both orderId and requestId)
      * @param {number} paymentData.amount - Payment amount
      * @param {string} paymentData.orderInfo - Order information
      * @param {string} paymentData.extraData - Extra data (optional)
      * @param {string} paymentData.internalOrderId - Internal order ID for mapping (optional)
+     * @param {Array} paymentData.items - List of items (optional)
+     * @param {Object} paymentData.deliveryInfo - Delivery information (optional)
+     * @param {Object} paymentData.userInfo - User information (optional)
+     * @param {string} paymentData.referenceId - Reference ID (optional)
+     * @param {string} paymentData.storeName - Store name (optional)
+     * @param {string} paymentData.subPartnerCode - Sub partner code (optional)
      * @returns {Object} Payment URL and request data
      */
     static async createPayment({
         orderId,
+        momoOrderId,
         amount,
         orderInfo = 'Thanh toán đơn hàng',
         extraData = '',
-        internalOrderId = null,
+        items = [],
+        deliveryInfo = null,
+        userInfo = null,
+        referenceId = null,
+        storeName = null,
+        subPartnerCode = null,
     }) {
         try {
             // Validate input
@@ -33,11 +56,18 @@ class MomoPaymentService {
                 throw new BadRequestError('orderId and amount are required');
             }
 
-            // Generate request data
-            const requestId = orderId + '_' + new Date().getTime();
+            // Validate amount range according to MoMo documentation
+            if (amount < 1000 || amount > 50000000) {
+                throw new BadRequestError(
+                    'Amount must be between 1,000 and 50,000,000 VND',
+                );
+            }
 
-            // Create raw signature string
-            const rawSignature = `accessKey=${momoConfig.accessKey}&amount=${amount}&extraData=${extraData}&ipnUrl=${momoConfig.ipnUrl}&orderId=${orderId}&orderInfo=${orderInfo}&partnerCode=${momoConfig.partnerCode}&redirectUrl=${momoConfig.redirectUrl}&requestId=${requestId}&requestType=${momoConfig.requestType}`;
+            // Use momoOrderId as requestId as per documentation requirement
+            const requestId = momoOrderId;
+
+            // Create raw signature string - EXACT format from MoMo documentation
+            const rawSignature = `accessKey=${momoConfig.accessKey}&amount=${amount}&extraData=${extraData}&ipnUrl=${momoConfig.ipnUrl}&orderId=${momoOrderId}&orderInfo=${orderInfo}&partnerCode=${momoConfig.partnerCode}&redirectUrl=${momoConfig.redirectUrl}&requestId=${requestId}&requestType=${momoConfig.requestType}`;
 
             // Create signature
             const signature = crypto
@@ -45,73 +75,405 @@ class MomoPaymentService {
                 .update(rawSignature)
                 .digest('hex');
 
-            // Create request body
+            // Create request body - EXACT format from MoMo documentation
             const requestBody = {
                 partnerCode: momoConfig.partnerCode,
-                partnerName: momoConfig.partnerName,
-                storeId: momoConfig.storeId,
+                accessKey: momoConfig.accessKey, // Add accessKey as per documentation
                 requestId: requestId,
                 amount: amount.toString(),
-                orderId: orderId,
+                orderId: momoOrderId,
                 orderInfo: orderInfo,
                 redirectUrl: momoConfig.redirectUrl,
                 ipnUrl: momoConfig.ipnUrl,
-                lang: momoConfig.lang,
-                requestType: momoConfig.requestType,
-                autoCapture: momoConfig.autoCapture,
                 extraData: extraData,
-                orderGroupId: momoConfig.orderGroupId,
+                requestType: momoConfig.requestType,
                 signature: signature,
+                lang: momoConfig.lang,
             };
 
+            // Add optional fields
+            if (storeName) requestBody.storeName = storeName;
+            if (subPartnerCode) requestBody.subPartnerCode = subPartnerCode;
+            if (referenceId) requestBody.referenceId = referenceId;
+            if (items && items.length > 0) requestBody.items = items;
+            if (deliveryInfo) requestBody.deliveryInfo = deliveryInfo;
+            if (userInfo) requestBody.userInfo = userInfo;
+
             // Send request to MoMo
-            const response = await this.sendMoMoRequest(requestBody);
+            const response = await this.sendMoMoRequest(
+                requestBody,
+                MOMO_ENDPOINTS.CREATE_PAYMENT,
+            );
+
+            // Check MoMo response
+            if (response.resultCode !== MOMO_RESULT_CODES.SUCCESS) {
+                throw new BadRequestError(
+                    `MoMo payment creation failed: ${response.message}`,
+                );
+            }
+            console.log('✅ MoMo payment created successfully:', response);
+            console.log('--------------------------------------------------');
+            console.log('orderId:', response.orderId);
+            console.log('orderId: ', orderId);
+            console.log('momoOrderId: ', momoOrderId);
+
+            // Update cart status to ordered (cart is no longer active)
+            const order = await database.Order.findByPk(orderId);
+
+            if (order && order.user_id) {
+                await database.Cart.update(
+                    { status: CART_STATUS.ORDERED },
+                    {
+                        where: {
+                            user_id: order.user_id,
+                            status: CART_STATUS.ACTIVE,
+                        },
+                    },
+                );
+            }
+
+            // Note: Order status should be managed separately from payment status
+            // Order status tracks: pending, confirmed, processing, shipped, delivered, cancelled
+            // Payment status tracks: pending, completed, failed, refunded, expired
 
             // Store payment record
-            await this.storePaymentRecord({
-                momoOrderId: orderId,
-                internalOrderId: internalOrderId || orderId, // Use internal order ID for database mapping
-                requestId,
-                amount,
-                signature,
-                rawSignature,
-                requestBody: JSON.stringify(requestBody),
-                response: JSON.stringify(response),
-            });
 
             return {
                 payUrl: response.payUrl,
                 deeplink: response.deeplink,
                 qrCodeUrl: response.qrCodeUrl,
+                deeplinkMiniApp: response.deeplinkMiniApp,
                 orderId: orderId,
                 requestId: requestId,
                 amount: amount,
+                payment: {
+                    order_id: orderId,
+                    payment_method: 'momo',
+                    transaction_id: requestId,
+                    transaction_code: response.transId || null,
+                    status: MOMO_PAYMENT_STATUS.PENDING,
+                    amount: amount,
+                    gateway_response: JSON.stringify(response),
+                },
+                responseTime: response.responseTime,
+                userFee: response.userFee || 0,
             };
         } catch (error) {
             console.error('MoMo payment creation error:', error);
-            throw new InternalServerError('Failed to create MoMo payment');
+            throw error;
         }
     }
 
+    // ===============================
+    // MAIN FUNCTION 2: IPN CALLBACK
+    // ===============================
+    /**
+     * Handle MoMo IPN callback to update order status
+     * @param {Object} ipnData - IPN data from MoMo
+     * @returns {Object} Response for MoMo
+     */
+    static async handleIpnCallback(ipnData) {
+        try {
+            // Validate signature
+            // const isValidSignature = this.validateIpnSignature(ipnData);
+            // if (!isValidSignature) {
+            //     throw new BadRequestError('Invalid signature');
+            // }
+
+            const {
+                orderId,
+                requestId,
+                resultCode,
+                amount,
+                transId,
+                message,
+                payType,
+            } = ipnData;
+
+            // Update payment record
+            const payment = await database.Payment.findOne({
+                where: { transaction_id: requestId },
+            });
+
+            if (!payment) {
+                throw new BadRequestError('Payment record not found');
+            }
+
+            // Update payment status based on result code
+            let paymentStatus = MOMO_PAYMENT_STATUS.PENDING;
+
+            if (resultCode === MOMO_RESULT_CODES.SUCCESS) {
+                paymentStatus = MOMO_PAYMENT_STATUS.COMPLETED;
+            } else if (resultCode === MOMO_RESULT_CODES.TRANSACTION_CANCELLED) {
+                paymentStatus = MOMO_PAYMENT_STATUS.CANCELLED;
+            } else if (resultCode === MOMO_RESULT_CODES.PAYMENT_EXPIRED) {
+                paymentStatus = MOMO_PAYMENT_STATUS.EXPIRED;
+            } else {
+                paymentStatus = MOMO_PAYMENT_STATUS.FAILED;
+            }
+
+            // Update payment record only - order status should be managed separately
+            await database.Payment.update(
+                {
+                    status: paymentStatus,
+                    transaction_code: transId,
+                    gateway_response: JSON.stringify(ipnData),
+                    paid_at:
+                        resultCode === MOMO_RESULT_CODES.SUCCESS
+                            ? new Date()
+                            : null,
+                },
+                {
+                    where: { id: payment.id },
+                },
+            );
+
+            // Note: Order status should be updated by order management system
+            // based on business logic, not directly tied to payment status
+
+            return {
+                status: 'success',
+                message: 'IPN processed successfully',
+                orderId: orderId,
+                resultCode: resultCode,
+            };
+        } catch (error) {
+            console.error('MoMo IPN callback error:', error);
+            throw error;
+        }
+    }
+
+    // ===============================
+    // MAIN FUNCTION 3: CHECK TRANSACTION STATUS
+    // ===============================
+    /**
+     * Check transaction status and update order
+     * @param {string} orderId - Order ID
+     * @returns {Object} Transaction status
+     */
+    static async checkTransactionStatus(orderId) {
+        try {
+            if (!orderId) {
+                throw new BadRequestError('orderId is required');
+            }
+
+            const payment = await database.Payment.findOne({
+                where: { order_id: orderId, payment_method: 'momo' },
+            });
+
+            if (!payment) {
+                throw new BadRequestError('Payment record not found');
+            }
+
+            // Use orderId as requestId
+            const requestId = orderId;
+
+            // Create signature for query
+            const rawSignature = `accessKey=${momoConfig.accessKey}&orderId=${orderId}&partnerCode=${momoConfig.partnerCode}&requestId=${requestId}`;
+            const signature = crypto
+                .createHmac('sha256', momoConfig.secretKey)
+                .update(rawSignature)
+                .digest('hex');
+
+            const requestBody = {
+                partnerCode: momoConfig.partnerCode,
+                requestId: requestId,
+                orderId: orderId,
+                signature: signature,
+                lang: momoConfig.lang,
+            };
+
+            // Send request to MoMo
+            const response = await this.sendMoMoRequest(
+                requestBody,
+                MOMO_ENDPOINTS.QUERY_TRANSACTION,
+            );
+
+            // Update payment and order status based on response
+            if (response.resultCode === MOMO_RESULT_CODES.SUCCESS) {
+                if (payment && payment.status === MOMO_PAYMENT_STATUS.PENDING) {
+                    // Update payment status only
+                    await database.Payment.update(
+                        {
+                            status: MOMO_PAYMENT_STATUS.COMPLETED,
+                            transaction_code: response.transId,
+                            gateway_response: JSON.stringify(response),
+                            paid_at: new Date(),
+                        },
+                        {
+                            where: { id: payment.id },
+                        },
+                    );
+
+                    // Note: Order status should be updated by order management system
+                    // based on business logic, not directly tied to payment status
+                }
+            }
+
+            return {
+                orderId: orderId,
+                transId: response.transId,
+                resultCode: response.resultCode,
+                message: response.message,
+                amount: response.amount,
+                payType: response.payType,
+                responseTime: response.responseTime,
+                extraData: response.extraData,
+                paymentOption: response.paymentOption,
+                promotionInfo: response.promotionInfo,
+                refundTrans: response.refundTrans || [],
+            };
+        } catch (error) {
+            console.error('Check transaction status error:', error);
+            throw error;
+        }
+    }
+
+    // ===============================
+    // MAIN FUNCTION 4: REFUND TRANSACTION
+    // ===============================
+    /**
+     * Refund complete transaction
+     * @param {string} orderId - Order ID
+     * @param {number} transId - MoMo transaction ID
+     * @param {number} amount - Refund amount
+     * @param {string} description - Refund description
+     * @returns {Object} Refund response
+     */
+    static async refundTransaction(
+        orderId,
+        transId,
+        amount,
+        description = 'Hoàn tiền đơn hàng',
+    ) {
+        try {
+            if (!orderId || !transId || !amount) {
+                throw new BadRequestError(
+                    'orderId, transId, and amount are required',
+                );
+            }
+
+            // Create refund order ID (different from original order ID)
+            const payment = await database.Payment.findOne({
+                where: { order_id: orderId, payment_method: 'momo' },
+            });
+
+            if (!payment) {
+                throw new BadRequestError('Payment record not found');
+            }
+            if (payment.status !== MOMO_PAYMENT_STATUS.COMPLETED) {
+                throw new BadRequestError(
+                    'Only completed transactions can be refunded',
+                );
+            }
+
+            const refundOrderId = `REFUND_${payment.external_order_id}_${Date.now()}`;
+            const requestId = refundOrderId;
+
+            // Create signature for refund
+            const rawSignature = `accessKey=${momoConfig.accessKey}&amount=${amount}&description=${description}&orderId=${refundOrderId}&partnerCode=${momoConfig.partnerCode}&requestId=${requestId}&transId=${transId}`;
+            const signature = crypto
+                .createHmac('sha256', momoConfig.secretKey)
+                .update(rawSignature)
+                .digest('hex');
+
+            const requestBody = {
+                partnerCode: momoConfig.partnerCode,
+                orderId: refundOrderId,
+                requestId: requestId,
+                amount: amount,
+                transId: transId,
+                lang: momoConfig.lang,
+                description: description,
+                signature: signature,
+            };
+
+            // Send refund request to MoMo
+            const response = await this.sendMoMoRequest(
+                requestBody,
+                MOMO_ENDPOINTS.REFUND_PAYMENT,
+            );
+
+            // Check refund response
+            if (response.resultCode === MOMO_RESULT_CODES.SUCCESS) {
+                // Update payment status to refunded
+                await database.Payment.update(
+                    {
+                        status: MOMO_PAYMENT_STATUS.REFUNDED,
+                        gateway_response: JSON.stringify(response),
+                    },
+                    {
+                        where: { order_id: orderId, payment_method: 'momo' },
+                    },
+                );
+
+                // Note: Order status should be updated by order management system
+                // based on business logic (e.g., order might be cancelled, returned, etc.)
+                // not directly tied to payment refund
+
+                // Create refund payment record
+                await database.Payment.create({
+                    order_id: orderId,
+                    payment_method: 'momo_refund',
+                    external_order_id: refundOrderId,
+                    transaction_id: requestId,
+                    transaction_code: response.transId,
+                    status: MOMO_PAYMENT_STATUS.COMPLETED,
+                    amount: -amount, // Negative amount for refund
+                    gateway_response: JSON.stringify(response),
+                    paid_at: new Date(),
+                });
+            }
+
+            return {
+                orderId: refundOrderId,
+                originalOrderId: orderId,
+                transId: response.transId,
+                resultCode: response.resultCode,
+                message: response.message,
+                amount: amount,
+                responseTime: response.responseTime,
+            };
+        } catch (error) {
+            console.error('MoMo refund error:', error);
+            throw error;
+        }
+    }
+
+    // ===============================
+    // HELPER METHODS
+    // ===============================
     /**
      * Send request to MoMo API
      * @param {Object} requestBody - Request body
+     * @param {string} endpoint - API endpoint
      * @returns {Promise<Object>} MoMo response
      */
-    static async sendMoMoRequest(requestBody) {
+    static async sendMoMoRequest(requestBody, endpoint) {
         return new Promise((resolve, reject) => {
             const requestBodyString = JSON.stringify(requestBody);
 
             const options = {
                 hostname: 'test-payment.momo.vn',
                 port: 443,
-                path: '/v2/gateway/api/create',
+                path: endpoint,
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Content-Length': Buffer.byteLength(requestBodyString),
                 },
+                timeout: 30000, // 30 seconds timeout as per documentation
             };
+            console.log('Sending request to MoMo:', {
+                endpoint: endpoint,
+                requestBody: requestBodyString,
+            });
+            console.log('--------------------REQUEST BODY----------------');
+            console.log(requestBodyString);
+            console.log('--------------------------------------------------');
+            console.log('--------------------REQUEST OPTIONS----------------');
+            console.log(JSON.stringify(options, null, 2));
+            console.log('--------------------------------------------------');
 
             const req = https.request(options, (res) => {
                 let data = '';
@@ -123,23 +485,20 @@ class MomoPaymentService {
                 res.on('end', () => {
                     try {
                         const response = JSON.parse(data);
-                        if (response.resultCode === 0) {
-                            resolve(response);
-                        } else {
-                            reject(
-                                new Error(
-                                    `MoMo API Error: ${response.message}`,
-                                ),
-                            );
-                        }
+                        resolve(response);
                     } catch (error) {
-                        reject(new Error('Failed to parse MoMo response'));
+                        reject(new Error('Invalid JSON response from MoMo'));
                     }
                 });
             });
 
             req.on('error', (error) => {
-                reject(new Error(`Request error: ${error.message}`));
+                reject(new Error(`MoMo request failed: ${error.message}`));
+            });
+
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('MoMo request timeout'));
             });
 
             req.write(requestBodyString);
@@ -148,31 +507,29 @@ class MomoPaymentService {
     }
 
     /**
-     * Verify MoMo callback signature
-     * @param {Object} callbackData - Callback data from MoMo
-     * @returns {boolean} Is signature valid
+     * Validate IPN signature
+     * @param {Object} ipnData - IPN data
+     * @returns {boolean} Is valid signature
      */
-    static verifySignature(callbackData) {
+    static validateIpnSignature(ipnData) {
         const {
-            partnerCode,
-            orderId,
-            requestId,
             amount,
+            extraData,
+            message,
+            orderId,
             orderInfo,
             orderType,
-            transId,
-            resultCode,
-            message,
+            partnerCode,
             payType,
+            requestId,
             responseTime,
-            extraData,
+            resultCode,
+            transId,
             signature,
-        } = callbackData;
+        } = ipnData;
 
-        // Create raw signature string for verification
         const rawSignature = `accessKey=${momoConfig.accessKey}&amount=${amount}&extraData=${extraData}&message=${message}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType}&partnerCode=${partnerCode}&payType=${payType}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
 
-        // Create expected signature
         const expectedSignature = crypto
             .createHmac('sha256', momoConfig.secretKey)
             .update(rawSignature)
@@ -182,421 +539,14 @@ class MomoPaymentService {
     }
 
     /**
-     * Handle MoMo IPN (Instant Payment Notification)
-     * @param {Object} ipnData - IPN data from MoMo
-     * @returns {Object} Processing result
-     */
-    static async handleIPN(ipnData) {
-        try {
-            // Verify signature
-            if (!this.verifySignature(ipnData)) {
-                throw new BadRequestError('Invalid signature');
-            }
-
-            const {
-                orderId: momoOrderId,
-                resultCode,
-                transId,
-                amount,
-                message,
-            } = ipnData;
-
-            // Find the internal order ID from the MoMo order ID
-            const payment = await database.Payment.findOne({
-                where: {
-                    payment_method: 'momo',
-                },
-                order: [['created_at', 'DESC']], // Get latest payment record
-            });
-
-            let internalOrderId = null;
-            if (payment && payment.gateway_response) {
-                try {
-                    const gatewayData = JSON.parse(payment.gateway_response);
-                    if (gatewayData.momoOrderId === momoOrderId) {
-                        internalOrderId = payment.order_id;
-                    }
-                } catch (parseError) {
-                    console.error(
-                        'Error parsing gateway response:',
-                        parseError,
-                    );
-                }
-            }
-
-            // If we can't find the mapping, extract from MoMo order ID pattern
-            if (!internalOrderId && momoOrderId.startsWith('ORDER_')) {
-                const parts = momoOrderId.split('_');
-                if (parts.length >= 2) {
-                    internalOrderId = parts[1]; // Extract order ID from ORDER_{id}_{timestamp}_{random}
-                }
-            }
-
-            if (!internalOrderId) {
-                throw new BadRequestError(
-                    'Cannot map MoMo order ID to internal order ID',
-                );
-            }
-
-            // Update payment record
-            await this.updatePaymentRecord({
-                orderId: internalOrderId,
-                momoOrderId: momoOrderId,
-                resultCode,
-                transId,
-                amount,
-                ipnData: JSON.stringify(ipnData),
-                message,
-            });
-
-            // Handle different result codes
-            const paymentStatus =
-                this.getPaymentStatusFromResultCode(resultCode);
-            await this.updateOrderStatus(
-                internalOrderId,
-                paymentStatus,
-                resultCode,
-                message,
-            );
-
-            return {
-                resultCode: 0,
-                message: 'Success',
-            };
-        } catch (error) {
-            console.error('MoMo IPN handling error:', error);
-            return {
-                resultCode: 1,
-                message: 'Error processing IPN',
-            };
-        }
-    }
-
-    /**
-     * Get payment status from MoMo result code
-     * @param {number} resultCode - MoMo result code
-     * @returns {string} Payment status
-     */
-    static getPaymentStatusFromResultCode(resultCode) {
-        switch (resultCode) {
-            case 0:
-                return 'completed'; // Success
-            case 9000:
-                return 'cancelled'; // User cancelled
-            case 8000:
-                return 'expired'; // Payment expired
-            case 7000:
-                return 'failed'; // Payment failed
-            case 6000:
-                return 'failed'; // Insufficient balance
-            case 5000:
-                return 'failed'; // Invalid transaction
-            case 4000:
-                return 'failed'; // Transaction limit exceeded
-            case 3000:
-                return 'failed'; // System error
-            case 2000:
-                return 'cancelled'; // Transaction cancelled by user
-            case 1000:
-                return 'failed'; // General error
-            default:
-                return 'failed'; // Unknown error
-        }
-    }
-
-    /**
-     * Get user-friendly message from MoMo result code
-     * @param {number} resultCode - MoMo result code
-     * @returns {string} User-friendly message
-     */
-    static getMessageFromResultCode(resultCode) {
-        switch (resultCode) {
-            // Success
-            case 0:
-                return 'Thanh toán thành công';
-
-            // Pending statuses
-            case 1000:
-                return 'Giao dịch đã được khởi tạo, chờ người dùng xác nhận thanh toán';
-            case 7000:
-                return 'Giao dịch đang được xử lý';
-            case 7002:
-                return 'Giao dịch đang được xử lý bởi nhà cung cấp thanh toán';
-            case 9000:
-                return 'Giao dịch đã được xác nhận thành công';
-
-            // Expired/Timeout
-            case 1005:
-                return 'Giao dịch thất bại do URL hoặc QR code đã hết hạn';
-
-            // Cancelled
-            case 1003:
-                return 'Giao dịch đã bị hủy';
-            case 1006:
-                return 'Giao dịch thất bại do người dùng đã từ chối xác nhận thanh toán';
-            case 1017:
-                return 'Giao dịch bị hủy bởi đối tác';
-
-            // User errors
-            case 1001:
-                return 'Giao dịch thanh toán thất bại do tài khoản người dùng không đủ tiền';
-            case 1002:
-                return 'Giao dịch bị từ chối do nhà phát hành tài khoản thanh toán';
-            case 1004:
-                return 'Giao dịch thất bại do số tiền thanh toán vượt quá hạn mức thanh toán của người dùng';
-            case 1007:
-                return 'Giao dịch bị từ chối vì tài khoản không tồn tại hoặc đang ở trạng thái ngưng hoạt động';
-            case 4001:
-                return 'Giao dịch bị từ chối do tài khoản người dùng đang bị hạn chế';
-            case 4002:
-                return 'Giao dịch bị từ chối do tài khoản người dùng chưa được xác thực với C06';
-            case 4100:
-                return 'Giao dịch thất bại do người dùng không đăng nhập thành công';
-
-            // System errors
-            case 10:
-                return 'Hệ thống đang được bảo trì';
-            case 11:
-                return 'Truy cập bị từ chối';
-            case 12:
-                return 'Phiên bản API không được hỗ trợ cho yêu cầu này';
-            case 47:
-                return 'Yêu cầu bị từ chối vì thông tin không hợp lệ trong danh sách dữ liệu khả dụng';
-            case 98:
-                return 'QR Code tạo không thành công. Vui lòng thử lại sau';
-            case 99:
-                return 'Lỗi không xác định';
-            case 1026:
-                return 'Giao dịch bị hạn chế theo thể lệ chương trình khuyến mãi';
-            case 2019:
-                return 'Yêu cầu bị từ chối vì orderGroupId không hợp lệ';
-
-            // Merchant errors
-            case 13:
-                return 'Xác thực doanh nghiệp thất bại';
-            case 20:
-                return 'Yêu cầu sai định dạng';
-            case 21:
-                return 'Yêu cầu bị từ chối vì số tiền giao dịch không hợp lệ';
-            case 22:
-                return 'Số tiền giao dịch không hợp lệ';
-            case 40:
-                return 'RequestId bị trùng';
-            case 41:
-                return 'OrderId bị trùng';
-            case 42:
-                return 'OrderId không hợp lệ hoặc không được tìm thấy';
-            case 43:
-                return 'Yêu cầu bị từ chối vì xung đột trong quá trình xử lý giao dịch';
-            case 45:
-                return 'Trùng ItemId';
-
-            // Refund errors
-            case 1080:
-                return 'Giao dịch hoàn tiền thất bại trong quá trình xử lý';
-            case 1081:
-                return 'Giao dịch hoàn tiền bị từ chối. Giao dịch thanh toán ban đầu có thể đã được hoàn';
-            case 1088:
-                return 'Giao dịch hoàn tiền bị từ chối. Giao dịch thanh toán ban đầu không được hỗ trợ hoàn tiền';
-
-            default:
-                return 'Lỗi không xác định';
-        }
-    }
-
-    /**
-     * Store payment record in database
-     * @param {Object} paymentData - Payment data to store
-     */
-    static async storePaymentRecord(paymentData) {
-        try {
-            await database.Payment.create({
-                order_id: paymentData.internalOrderId, // Use internal order ID for database
-                payment_method: 'momo',
-                amount: paymentData.amount,
-                status: 'pending',
-                transaction_id: paymentData.requestId,
-                gateway_response: JSON.stringify({
-                    momoOrderId: paymentData.momoOrderId, // Store MoMo order ID for reference
-                    response: paymentData.response,
-                    requestBody: paymentData.requestBody,
-                }),
-                created_at: new Date(),
-            });
-        } catch (error) {
-            console.error('Error storing payment record:', error);
-            // Don't throw error here to avoid breaking payment flow
-        }
-    }
-
-    /**
-     * Update payment record after callback
-     * @param {Object} updateData - Update data
-     */
-    static async updatePaymentRecord(updateData) {
-        try {
-            const status = updateData.resultCode === 0 ? 'completed' : 'failed';
-
-            // Update the payment record with additional MoMo data
-            const gatewayResponse = {
-                momoOrderId: updateData.momoOrderId,
-                ipnData: updateData.ipnData,
-                transactionId: updateData.transId,
-                resultCode: updateData.resultCode,
-            };
-
-            await database.Payment.update(
-                {
-                    status: status,
-                    transaction_id: updateData.transId,
-                    gateway_response: JSON.stringify(gatewayResponse),
-                    updated_at: new Date(),
-                },
-                {
-                    where: {
-                        order_id: updateData.orderId,
-                        payment_method: 'momo',
-                    },
-                },
-            );
-        } catch (error) {
-            console.error('Error updating payment record:', error);
-        }
-    }
-
-    /**
-     * Update order status
-     * @param {string} orderId - Order ID
-     * @param {string} paymentStatus - Payment status
-     * @param {number} resultCode - MoMo result code
-     * @param {string} message - MoMo message
-     */
-    static async updateOrderStatus(
-        orderId,
-        paymentStatus,
-        resultCode = null,
-        message = null,
-    ) {
-        try {
-            if (paymentStatus === 'completed') {
-                // Complete the order payment process
-                const OrderService = require('../order/order.service');
-                await OrderService.completeOrderPayment(orderId);
-            } else {
-                // Handle different failure/cancellation cases
-                let orderStatus = 'payment_failed';
-                let updateData = {
-                    updated_at: new Date(),
-                };
-
-                switch (paymentStatus) {
-                    case 'expired':
-                        orderStatus = 'payment_expired';
-                        updateData.note =
-                            (updateData.note ? updateData.note + ' | ' : '') +
-                            `Thanh toán hết hạn lúc ${new Date().toLocaleString('vi-VN')}`;
-                        break;
-                    case 'cancelled':
-                        orderStatus = 'payment_cancelled';
-                        updateData.note =
-                            (updateData.note ? updateData.note + ' | ' : '') +
-                            `Thanh toán bị hủy lúc ${new Date().toLocaleString('vi-VN')}`;
-                        break;
-                    case 'failed':
-                    default:
-                        orderStatus = 'payment_failed';
-                        updateData.note =
-                            (updateData.note ? updateData.note + ' | ' : '') +
-                            `Thanh toán thất bại lúc ${new Date().toLocaleString('vi-VN')}` +
-                            (message ? ` - ${message}` : '');
-                        break;
-                }
-
-                updateData.status = orderStatus;
-
-                await database.Order.update(updateData, {
-                    where: { id: orderId },
-                });
-
-                // For expired/cancelled payments, we should restore product stock
-                if (
-                    paymentStatus === 'expired' ||
-                    paymentStatus === 'cancelled'
-                ) {
-                    await this.restoreProductStock(orderId);
-                }
-            }
-        } catch (error) {
-            console.error('Error updating order status:', error);
-        }
-    }
-
-    /**
-     * Restore product stock for cancelled/expired orders
-     * @param {string} orderId - Order ID
-     */
-    static async restoreProductStock(orderId) {
-        try {
-            // Get order with line items
-            const order = await database.Order.findOne({
-                where: { id: orderId },
-                include: [{ model: database.OrderLineItem, as: 'lineItems' }],
-            });
-
-            if (!order || !order.lineItems) {
-                return;
-            }
-
-            // Restore stock for each product in the order
-            const transaction = await database.sequelize.transaction();
-            try {
-                for (const item of order.lineItems) {
-                    const product = await database.Product.findByPk(
-                        item.product_id,
-                        { transaction },
-                    );
-
-                    if (product) {
-                        product.stock =
-                            Number(product.stock) + Number(item.quantity);
-
-                        // Update inventory type based on new stock level
-                        if (product.stock > (product.min_stock || 0)) {
-                            product.inventory_type = 'in_stock';
-                        } else if (product.stock > 0) {
-                            product.inventory_type = 'low_stock';
-                        }
-
-                        await product.save({ transaction });
-                    }
-                }
-
-                await transaction.commit();
-                console.log(`Stock restored for order ${orderId}`);
-            } catch (error) {
-                await transaction.rollback();
-                console.error(
-                    `Error restoring stock for order ${orderId}:`,
-                    error,
-                );
-            }
-        } catch (error) {
-            console.error('Error in restoreProductStock:', error);
-        }
-    }
-
-    /**
-     * Get payment status
+     * Get payment status by order ID
      * @param {string} orderId - Order ID
      * @returns {Object} Payment status
      */
     static async getPaymentStatus(orderId) {
         try {
             const payment = await database.Payment.findOne({
-                where: {
-                    order_id: orderId,
-                    payment_method: 'momo',
-                },
+                where: { order_id: orderId, payment_method: 'momo' },
             });
 
             if (!payment) {
@@ -604,1477 +554,17 @@ class MomoPaymentService {
             }
 
             return {
-                orderId: payment.order_id,
+                orderId: orderId,
+                paymentStatus: payment.status,
                 amount: payment.amount,
-                status: payment.status,
                 transactionId: payment.transaction_id,
-                createdAt: payment.created_at,
+                transactionCode: payment.transaction_code,
+                paidAt: payment.paid_at,
+                gatewayResponse: payment.gateway_response,
             };
         } catch (error) {
-            console.error('Error getting payment status:', error);
-            throw new InternalServerError('Failed to get payment status');
-        }
-    }
-
-    /**
-     * Check and handle expired payments
-     * This method should be called periodically (e.g., every 5 minutes)
-     */
-    static async checkExpiredPayments() {
-        try {
-            const momoConfig = require('../../configs/momo.config');
-            const expirationTime = new Date();
-            expirationTime.setMinutes(
-                expirationTime.getMinutes() -
-                    momoConfig.paymentExpirationMinutes,
-            );
-
-            // Find pending payments that are older than expiration time
-            const expiredPayments = await database.Payment.findAll({
-                where: {
-                    payment_method: 'momo',
-                    status: 'pending',
-                    created_at: {
-                        [database.Sequelize.Op.lt]: expirationTime,
-                    },
-                },
-                include: [
-                    {
-                        model: database.Order,
-                        as: 'order',
-                        where: {
-                            status: 'pending_payment',
-                        },
-                    },
-                ],
-            });
-
-            console.log(
-                `Found ${expiredPayments.length} expired MoMo payments`,
-            );
-
-            for (const payment of expiredPayments) {
-                await this.handlePaymentExpiration(payment);
-            }
-
-            return {
-                processed: expiredPayments.length,
-                message: `Processed ${expiredPayments.length} expired payments`,
-            };
-        } catch (error) {
-            console.error('Error checking expired payments:', error);
-            return {
-                processed: 0,
-                error: error.message,
-            };
-        }
-    }
-
-    /**
-     * Handle individual payment expiration
-     * @param {Object} payment - Payment record
-     */
-    static async handlePaymentExpiration(payment) {
-        try {
-            // Update payment status to expired
-            await database.Payment.update(
-                {
-                    status: 'expired',
-                    gateway_response: JSON.stringify({
-                        ...JSON.parse(payment.gateway_response || '{}'),
-                        expiredAt: new Date(),
-                        expiredReason: 'Payment timeout',
-                    }),
-                    updated_at: new Date(),
-                },
-                {
-                    where: { id: payment.id },
-                },
-            );
-
-            // Update order status and restore stock
-            await this.updateOrderStatus(
-                payment.order_id,
-                'expired',
-                8000,
-                'Payment expired due to timeout',
-            );
-
-            console.log(`Payment expired for order ${payment.order_id}`);
-        } catch (error) {
-            console.error(
-                `Error handling payment expiration for order ${payment.order_id}:`,
-                error,
-            );
-        }
-    }
-
-    /**
-     * Get payment expiration status
-     * @param {string} orderId - Order ID
-     * @returns {Object} Expiration status
-     */
-    static async getPaymentExpirationStatus(orderId) {
-        try {
-            const payment = await database.Payment.findOne({
-                where: {
-                    order_id: orderId,
-                    payment_method: 'momo',
-                },
-                order: [['created_at', 'DESC']],
-            });
-
-            if (!payment) {
-                return {
-                    found: false,
-                    message: 'Payment not found',
-                };
-            }
-
-            const momoConfig = require('../../configs/momo.config');
-            const createdAt = new Date(payment.created_at);
-            const expirationTime = new Date(
-                createdAt.getTime() +
-                    momoConfig.paymentExpirationMinutes * 60 * 1000,
-            );
-            const now = new Date();
-            const isExpired = now > expirationTime;
-            const timeLeft = Math.max(
-                0,
-                Math.floor((expirationTime - now) / 1000),
-            ); // seconds
-
-            return {
-                found: true,
-                isExpired,
-                timeLeft,
-                timeLeftFormatted: this.formatTimeLeft(timeLeft),
-                expirationTime,
-                status: payment.status,
-                paymentId: payment.id,
-            };
-        } catch (error) {
-            console.error('Error getting payment expiration status:', error);
-            return {
-                found: false,
-                error: error.message,
-            };
-        }
-    }
-
-    /**
-     * Format time left in human-readable format
-     * @param {number} seconds - Seconds left
-     * @returns {string} Formatted time
-     */
-    static formatTimeLeft(seconds) {
-        if (seconds <= 0) return '00:00';
-
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-
-        return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-    }
-
-    /**
-     * Cancel pending payment manually
-     * @param {string} orderId - Order ID
-     * @param {string} reason - Cancellation reason
-     * @returns {Object} Cancellation result
-     */
-    static async cancelPayment(orderId, reason = 'Manual cancellation') {
-        try {
-            const payment = await database.Payment.findOne({
-                where: {
-                    order_id: orderId,
-                    payment_method: 'momo',
-                    status: 'pending',
-                },
-            });
-
-            if (!payment) {
-                return {
-                    success: false,
-                    message: 'Pending payment not found',
-                };
-            }
-
-            // Update payment status
-            await database.Payment.update(
-                {
-                    status: 'cancelled',
-                    gateway_response: JSON.stringify({
-                        ...JSON.parse(payment.gateway_response || '{}'),
-                        cancelledAt: new Date(),
-                        cancelledReason: reason,
-                    }),
-                    updated_at: new Date(),
-                },
-                {
-                    where: { id: payment.id },
-                },
-            );
-
-            // Update order status and restore stock
-            await this.updateOrderStatus(orderId, 'cancelled', 9000, reason);
-
-            return {
-                success: true,
-                message: 'Payment cancelled successfully',
-                orderId,
-            };
-        } catch (error) {
-            console.error('Error cancelling payment:', error);
-            return {
-                success: false,
-                error: error.message,
-            };
-        }
-    }
-
-    /**
-     * Check for expired payments and update their status
-     * MoMo payments typically expire after 15 minutes
-     * @param {number} expirationMinutes - Minutes after which payments expire (default: 15)
-     * @returns {Object} Cleanup result
-     */
-    static async checkExpiredPayments(expirationMinutes = 15) {
-        try {
-            const expirationTime = new Date(
-                Date.now() - expirationMinutes * 60 * 1000,
-            );
-
-            // Find pending MoMo payments older than expiration time
-            const expiredPayments = await database.Payment.findAll({
-                where: {
-                    payment_method: 'momo',
-                    status: 'pending',
-                    created_at: {
-                        [database.Sequelize.Op.lt]: expirationTime,
-                    },
-                },
-                include: [
-                    {
-                        model: database.Order,
-                        as: 'order',
-                        where: {
-                            status: 'pending_payment',
-                        },
-                    },
-                ],
-            });
-
-            const updatedCount = expiredPayments.length;
-
-            // Update expired payments and orders
-            for (const payment of expiredPayments) {
-                await this.updatePaymentRecord({
-                    orderId: payment.order_id,
-                    momoOrderId: 'EXPIRED_' + payment.order_id,
-                    resultCode: 1005, // URL or QR code expired
-                    transId: null,
-                    amount: payment.amount,
-                    ipnData: JSON.stringify({
-                        resultCode: 1005,
-                        message: 'Payment expired due to timeout',
-                        expiredAt: new Date().toISOString(),
-                    }),
-                    message: 'Payment expired due to timeout',
-                });
-
-                await this.updateOrderStatus(
-                    payment.order_id,
-                    'expired',
-                    1005,
-                    'Payment expired',
-                );
-            }
-
-            return {
-                success: true,
-                expiredCount: updatedCount,
-                message: `Updated ${updatedCount} expired payments`,
-            };
-        } catch (error) {
-            console.error('Error checking expired payments:', error);
-            return {
-                success: false,
-                error: error.message,
-            };
-        }
-    }
-
-    /**
-     * Create MoMo refund request
-     * @param {Object} refundData - Refund data
-     * @param {string} refundData.originalOrderId - Original order ID that was paid
-     * @param {string} refundData.refundOrderId - New order ID for refund (must be different from original)
-     * @param {number} refundData.amount - Amount to refund
-     * @param {string} refundData.transId - Original MoMo transaction ID
-     * @param {string} refundData.description - Refund description
-     * @param {Array} refundData.transGroup - Items to refund (optional for itemized refunds)
-     * @returns {Object} Refund response
-     */
-    static async createRefund({
-        originalOrderId,
-        refundOrderId,
-        amount,
-        transId,
-        description = 'Refund order',
-        transGroup = [],
-    }) {
-        try {
-            // Validate input
-            if (!originalOrderId || !refundOrderId || !amount || !transId) {
-                throw new BadRequestError('Required refund parameters missing');
-            }
-
-            // Generate request ID for refund
-            const requestId = `REF_${refundOrderId}_${new Date().getTime()}`;
-
-            // Create raw signature string for refund
-            const rawSignature = `accessKey=${momoConfig.accessKey}&amount=${amount}&description=${description}&orderId=${refundOrderId}&partnerCode=${momoConfig.partnerCode}&requestId=${requestId}&transId=${transId}`;
-
-            // Create signature
-            const signature = crypto
-                .createHmac('sha256', momoConfig.secretKey)
-                .update(rawSignature)
-                .digest('hex');
-
-            // Create request body
-            const requestBody = {
-                partnerCode: momoConfig.partnerCode,
-                orderId: refundOrderId,
-                requestId: requestId,
-                amount: amount,
-                transId: transId,
-                lang: momoConfig.lang,
-                description: description,
-                signature: signature,
-            };
-
-            // Add transGroup if provided (for itemized refunds)
-            if (transGroup && transGroup.length > 0) {
-                requestBody.transGroup = transGroup;
-            }
-
-            // Send refund request to MoMo
-            const response = await this.sendMoMoRefundRequest(requestBody);
-
-            // Store refund record
-            await this.storeRefundRecord({
-                originalOrderId,
-                refundOrderId,
-                requestId,
-                amount,
-                transId,
-                description,
-                requestBody: JSON.stringify(requestBody),
-                response: JSON.stringify(response),
-            });
-
-            return {
-                success: response.resultCode === 0,
-                refundOrderId: refundOrderId,
-                requestId: requestId,
-                amount: amount,
-                transId: response.transId,
-                resultCode: response.resultCode,
-                message: response.message,
-                responseTime: response.responseTime,
-                transGroup: response.transGroup || [],
-            };
-        } catch (error) {
-            console.error('MoMo refund creation error:', error);
-            throw new InternalServerError('Failed to create MoMo refund');
-        }
-    }
-
-    /**
-     * Send refund request to MoMo API
-     * @param {Object} requestBody - Refund request body
-     * @returns {Promise<Object>} MoMo refund response
-     */
-    static async sendMoMoRefundRequest(requestBody) {
-        return new Promise((resolve, reject) => {
-            const requestBodyString = JSON.stringify(requestBody);
-
-            const options = {
-                hostname: 'test-payment.momo.vn',
-                port: 443,
-                path: '/v2/gateway/api/refund',
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(requestBodyString),
-                },
-                timeout: 30000, // 30 second timeout as recommended by MoMo
-            };
-
-            const req = https.request(options, (res) => {
-                let data = '';
-
-                res.on('data', (chunk) => {
-                    data += chunk;
-                });
-
-                res.on('end', () => {
-                    try {
-                        const response = JSON.parse(data);
-                        resolve(response);
-                    } catch (error) {
-                        reject(
-                            new Error('Failed to parse MoMo refund response'),
-                        );
-                    }
-                });
-            });
-
-            req.on('error', (error) => {
-                reject(new Error(`Refund request error: ${error.message}`));
-            });
-
-            req.on('timeout', () => {
-                req.destroy();
-                reject(new Error('Refund request timeout'));
-            });
-
-            req.write(requestBodyString);
-            req.end();
-        });
-    }
-
-    /**
-     * Query refund status from MoMo
-     * @param {string} refundOrderId - Refund order ID
-     * @param {string} requestId - Refund request ID
-     * @returns {Object} Refund status
-     */
-    static async queryRefundStatus(refundOrderId, requestId) {
-        try {
-            // Create raw signature string for query
-            const rawSignature = `accessKey=${momoConfig.accessKey}&orderId=${refundOrderId}&partnerCode=${momoConfig.partnerCode}&requestId=${requestId}`;
-
-            // Create signature
-            const signature = crypto
-                .createHmac('sha256', momoConfig.secretKey)
-                .update(rawSignature)
-                .digest('hex');
-
-            // Create request body
-            const requestBody = {
-                partnerCode: momoConfig.partnerCode,
-                requestId: requestId,
-                orderId: refundOrderId,
-                lang: momoConfig.lang,
-                signature: signature,
-            };
-
-            // Send query request to MoMo
-            const response = await this.sendMoMoRefundQuery(requestBody);
-
-            return {
-                success: response.resultCode === 0,
-                refundOrderId: response.orderId,
-                requestId: response.requestId,
-                resultCode: response.resultCode,
-                message: response.message,
-                responseTime: response.responseTime,
-                refundTrans: response.refundTrans || [],
-                items: response.items || [],
-            };
-        } catch (error) {
-            console.error('MoMo refund query error:', error);
-            throw new InternalServerError('Failed to query MoMo refund status');
-        }
-    }
-
-    /**
-     * Send refund query request to MoMo API
-     * @param {Object} requestBody - Query request body
-     * @returns {Promise<Object>} MoMo query response
-     */
-    static async sendMoMoRefundQuery(requestBody) {
-        return new Promise((resolve, reject) => {
-            const requestBodyString = JSON.stringify(requestBody);
-
-            const options = {
-                hostname: 'test-payment.momo.vn',
-                port: 443,
-                path: '/v2/gateway/api/refund/query',
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(requestBodyString),
-                },
-                timeout: 30000, // 30 second timeout
-            };
-
-            const req = https.request(options, (res) => {
-                let data = '';
-
-                res.on('data', (chunk) => {
-                    data += chunk;
-                });
-
-                res.on('end', () => {
-                    try {
-                        const response = JSON.parse(data);
-                        resolve(response);
-                    } catch (error) {
-                        reject(
-                            new Error(
-                                'Failed to parse MoMo refund query response',
-                            ),
-                        );
-                    }
-                });
-            });
-
-            req.on('error', (error) => {
-                reject(new Error(`Refund query error: ${error.message}`));
-            });
-
-            req.on('timeout', () => {
-                req.destroy();
-                reject(new Error('Refund query timeout'));
-            });
-
-            req.write(requestBodyString);
-            req.end();
-        });
-    }
-
-    /**
-     * Store refund record in database
-     * @param {Object} refundData - Refund data to store
-     */
-    static async storeRefundRecord(refundData) {
-        try {
-            // Create a new payment record for the refund
-            await database.Payment.create({
-                order_id: refundData.originalOrderId,
-                payment_method: 'momo_refund',
-                amount: -Math.abs(refundData.amount), // Negative amount for refunds
-                status: 'pending',
-                transaction_id: refundData.requestId,
-                gateway_response: JSON.stringify({
-                    type: 'refund',
-                    refundOrderId: refundData.refundOrderId,
-                    originalTransId: refundData.transId,
-                    requestBody: refundData.requestBody,
-                    response: refundData.response,
-                }),
-                created_at: new Date(),
-            });
-
-            console.log(
-                `Refund record stored for order ${refundData.originalOrderId}`,
-            );
-        } catch (error) {
-            console.error('Error storing refund record:', error);
-            // Don't throw error here to avoid breaking refund flow
-        }
-    }
-
-    /**
-     * Update refund record after processing
-     * @param {Object} updateData - Update data
-     */
-    static async updateRefundRecord(updateData) {
-        try {
-            const status = updateData.resultCode === 0 ? 'completed' : 'failed';
-
-            await database.Payment.update(
-                {
-                    status: status,
-                    gateway_response: JSON.stringify({
-                        type: 'refund',
-                        ...JSON.parse(updateData.gatewayResponse || '{}'),
-                        resultCode: updateData.resultCode,
-                        processedAt: new Date(),
-                    }),
-                    updated_at: new Date(),
-                },
-                {
-                    where: {
-                        transaction_id: updateData.requestId,
-                        payment_method: 'momo_refund',
-                    },
-                },
-            );
-
-            console.log(
-                `Refund record updated for request ${updateData.requestId}`,
-            );
-        } catch (error) {
-            console.error('Error updating refund record:', error);
-        }
-    }
-
-    /**
-     * Process full refund for an order
-     * @param {string} orderId - Original order ID
-     * @param {string} reason - Refund reason
-     * @returns {Object} Refund result
-     */
-    static async processFullRefund(orderId, reason = 'Order return') {
-        try {
-            // Get the original payment record
-            const originalPayment = await database.Payment.findOne({
-                where: {
-                    order_id: orderId,
-                    payment_method: 'momo',
-                    status: 'completed',
-                },
-                order: [['created_at', 'DESC']],
-            });
-
-            if (!originalPayment) {
-                throw new BadRequestError(
-                    'Original completed payment not found',
-                );
-            }
-
-            // Extract original transaction ID from gateway response
-            let originalTransId = null;
-            try {
-                const gatewayData = JSON.parse(
-                    originalPayment.gateway_response || '{}',
-                );
-                if (gatewayData.ipnData) {
-                    const ipnData = JSON.parse(gatewayData.ipnData);
-                    originalTransId = ipnData.transId;
-                } else if (gatewayData.transactionId) {
-                    originalTransId = gatewayData.transactionId;
-                }
-            } catch (parseError) {
-                console.error('Error parsing gateway response:', parseError);
-            }
-
-            if (!originalTransId) {
-                throw new BadRequestError('Original transaction ID not found');
-            }
-
-            // Generate new refund order ID
-            const refundOrderId = `REFUND_${orderId}_${new Date().getTime()}`;
-
-            // Create refund request
-            const refundResult = await this.createRefund({
-                originalOrderId: orderId,
-                refundOrderId: refundOrderId,
-                amount: Math.abs(originalPayment.amount), // Full amount
-                transId: originalTransId,
-                description: `Full refund: ${reason}`,
-            });
-
-            // Update order status if refund successful
-            if (refundResult.success) {
-                await this.updateOrderStatusForRefund(
-                    orderId,
-                    'refunded',
-                    reason,
-                );
-            }
-
-            return refundResult;
-        } catch (error) {
-            console.error('Error processing full refund:', error);
-            throw new InternalServerError('Failed to process full refund');
-        }
-    }
-
-    /**
-     * Process partial refund for an order
-     * @param {string} orderId - Original order ID
-     * @param {number} refundAmount - Amount to refund
-     * @param {string} reason - Refund reason
-     * @param {Array} items - Items to refund (optional)
-     * @returns {Object} Refund result
-     */
-    static async processPartialRefund(
-        orderId,
-        refundAmount,
-        reason = 'Partial return',
-        items = [],
-    ) {
-        try {
-            // Get the original payment record
-            const originalPayment = await database.Payment.findOne({
-                where: {
-                    order_id: orderId,
-                    payment_method: 'momo',
-                    status: 'completed',
-                },
-                order: [['created_at', 'DESC']],
-            });
-
-            if (!originalPayment) {
-                throw new BadRequestError(
-                    'Original completed payment not found',
-                );
-            }
-
-            // Validate refund amount
-            if (refundAmount > Math.abs(originalPayment.amount)) {
-                throw new BadRequestError(
-                    'Refund amount cannot exceed original payment amount',
-                );
-            }
-
-            // Get total already refunded
-            const totalRefunded = await this.getTotalRefundedAmount(orderId);
-            if (
-                refundAmount + totalRefunded >
-                Math.abs(originalPayment.amount)
-            ) {
-                throw new BadRequestError(
-                    'Total refund amount would exceed original payment',
-                );
-            }
-
-            // Extract original transaction ID
-            let originalTransId = null;
-            try {
-                const gatewayData = JSON.parse(
-                    originalPayment.gateway_response || '{}',
-                );
-                if (gatewayData.ipnData) {
-                    const ipnData = JSON.parse(gatewayData.ipnData);
-                    originalTransId = ipnData.transId;
-                } else if (gatewayData.transactionId) {
-                    originalTransId = gatewayData.transactionId;
-                }
-            } catch (parseError) {
-                console.error('Error parsing gateway response:', parseError);
-            }
-
-            if (!originalTransId) {
-                throw new BadRequestError('Original transaction ID not found');
-            }
-
-            // Generate new refund order ID
-            const refundOrderId = `REFUND_${orderId}_${new Date().getTime()}`;
-
-            // Prepare transGroup for itemized refunds
-            let transGroup = [];
-            if (items && items.length > 0) {
-                transGroup = items.map((item) => ({
-                    itemId: item.itemId || item.productId,
-                    amount: item.amount,
-                    transId: originalTransId, // Use original transaction ID
-                }));
-            }
-
-            // Create refund request
-            const refundResult = await this.createRefund({
-                originalOrderId: orderId,
-                refundOrderId: refundOrderId,
-                amount: refundAmount,
-                transId: originalTransId,
-                description: `Partial refund: ${reason}`,
-                transGroup: transGroup,
-            });
-
-            // Update order status if refund successful
-            if (refundResult.success) {
-                const newTotalRefunded = totalRefunded + refundAmount;
-                const isFullyRefunded =
-                    newTotalRefunded >= Math.abs(originalPayment.amount);
-
-                await this.updateOrderStatusForRefund(
-                    orderId,
-                    isFullyRefunded ? 'refunded' : 'partially_refunded',
-                    reason,
-                );
-            }
-
-            return refundResult;
-        } catch (error) {
-            console.error('Error processing partial refund:', error);
-            throw new InternalServerError('Failed to process partial refund');
-        }
-    }
-
-    /**
-     * Get total refunded amount for an order
-     * @param {string} orderId - Order ID
-     * @returns {number} Total refunded amount
-     */
-    static async getTotalRefundedAmount(orderId) {
-        try {
-            const refunds = await database.Payment.findAll({
-                where: {
-                    order_id: orderId,
-                    payment_method: 'momo_refund',
-                    status: 'completed',
-                },
-            });
-
-            return refunds.reduce((total, refund) => {
-                return total + Math.abs(refund.amount);
-            }, 0);
-        } catch (error) {
-            console.error('Error getting total refunded amount:', error);
-            return 0;
-        }
-    }
-
-    /**
-     * Update order status for refund
-     * @param {string} orderId - Order ID
-     * @param {string} refundStatus - Refund status
-     * @param {string} reason - Refund reason
-     */
-    static async updateOrderStatusForRefund(orderId, refundStatus, reason) {
-        try {
-            const updateData = {
-                status:
-                    refundStatus === 'refunded'
-                        ? 'returned'
-                        : 'partially_returned',
-                note: `Refund processed: ${reason} at ${new Date().toLocaleString('vi-VN')}`,
-                updated_at: new Date(),
-            };
-
-            await database.Order.update(updateData, {
-                where: { id: orderId },
-            });
-
-            console.log(
-                `Order ${orderId} status updated to ${updateData.status}`,
-            );
-        } catch (error) {
-            console.error('Error updating order status for refund:', error);
-        }
-    }
-
-    /**
-     * Get refund history for an order
-     * @param {string} orderId - Order ID
-     * @returns {Array} Refund history
-     */
-    static async getRefundHistory(orderId) {
-        try {
-            const refunds = await database.Payment.findAll({
-                where: {
-                    order_id: orderId,
-                    payment_method: 'momo_refund',
-                },
-                order: [['created_at', 'DESC']],
-            });
-
-            return refunds.map((refund) => {
-                let gatewayData = {};
-                try {
-                    gatewayData = JSON.parse(refund.gateway_response || '{}');
-                } catch (parseError) {
-                    console.error(
-                        'Error parsing refund gateway response:',
-                        parseError,
-                    );
-                }
-
-                return {
-                    id: refund.id,
-                    amount: Math.abs(refund.amount),
-                    status: refund.status,
-                    transactionId: refund.transaction_id,
-                    refundOrderId: gatewayData.refundOrderId,
-                    createdAt: refund.created_at,
-                    updatedAt: refund.updated_at,
-                };
-            });
-        } catch (error) {
-            console.error('Error getting refund history:', error);
-            return [];
-        }
-    }
-
-    /**
-     * Create MoMo refund request
-     * @param {Object} refundData - Refund data
-     * @param {string} refundData.originalOrderId - Original order ID that was paid
-     * @param {string} refundData.refundOrderId - New order ID for refund (must be different from original)
-     * @param {number} refundData.amount - Amount to refund
-     * @param {string} refundData.transId - Original MoMo transaction ID
-     * @param {string} refundData.description - Refund description
-     * @param {Array} refundData.transGroup - Items to refund (optional for itemized refunds)
-     * @returns {Object} Refund response
-     */
-    static async createRefund({
-        originalOrderId,
-        refundOrderId,
-        amount,
-        transId,
-        description = 'Refund order',
-        transGroup = [],
-    }) {
-        try {
-            // Validate input
-            if (!originalOrderId || !refundOrderId || !amount || !transId) {
-                throw new BadRequestError('Required refund parameters missing');
-            }
-
-            // Generate request ID for refund
-            const requestId = `REF_${refundOrderId}_${new Date().getTime()}`;
-
-            // Create raw signature string for refund
-            const rawSignature = `accessKey=${momoConfig.accessKey}&amount=${amount}&description=${description}&orderId=${refundOrderId}&partnerCode=${momoConfig.partnerCode}&requestId=${requestId}&transId=${transId}`;
-
-            // Create signature
-            const signature = crypto
-                .createHmac('sha256', momoConfig.secretKey)
-                .update(rawSignature)
-                .digest('hex');
-
-            // Create request body
-            const requestBody = {
-                partnerCode: momoConfig.partnerCode,
-                orderId: refundOrderId,
-                requestId: requestId,
-                amount: amount,
-                transId: transId,
-                lang: momoConfig.lang,
-                description: description,
-                signature: signature,
-            };
-
-            // Add transGroup if provided (for itemized refunds)
-            if (transGroup && transGroup.length > 0) {
-                requestBody.transGroup = transGroup;
-            }
-
-            // Send refund request to MoMo
-            const response = await this.sendMoMoRefundRequest(requestBody);
-
-            // Store refund record
-            await this.storeRefundRecord({
-                originalOrderId,
-                refundOrderId,
-                requestId,
-                amount,
-                transId,
-                description,
-                requestBody: JSON.stringify(requestBody),
-                response: JSON.stringify(response),
-            });
-
-            return {
-                success: response.resultCode === 0,
-                refundOrderId: refundOrderId,
-                requestId: requestId,
-                amount: amount,
-                transId: response.transId,
-                resultCode: response.resultCode,
-                message: response.message,
-                responseTime: response.responseTime,
-                transGroup: response.transGroup || [],
-            };
-        } catch (error) {
-            console.error('MoMo refund creation error:', error);
-            throw new InternalServerError('Failed to create MoMo refund');
-        }
-    }
-
-    /**
-     * Send refund request to MoMo API
-     * @param {Object} requestBody - Refund request body
-     * @returns {Promise<Object>} MoMo refund response
-     */
-    static async sendMoMoRefundRequest(requestBody) {
-        return new Promise((resolve, reject) => {
-            const requestBodyString = JSON.stringify(requestBody);
-
-            const options = {
-                hostname: 'test-payment.momo.vn',
-                port: 443,
-                path: '/v2/gateway/api/refund',
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(requestBodyString),
-                },
-                timeout: 30000, // 30 second timeout as recommended by MoMo
-            };
-
-            const req = https.request(options, (res) => {
-                let data = '';
-
-                res.on('data', (chunk) => {
-                    data += chunk;
-                });
-
-                res.on('end', () => {
-                    try {
-                        const response = JSON.parse(data);
-                        resolve(response);
-                    } catch (error) {
-                        reject(
-                            new Error('Failed to parse MoMo refund response'),
-                        );
-                    }
-                });
-            });
-
-            req.on('error', (error) => {
-                reject(new Error(`Refund request error: ${error.message}`));
-            });
-
-            req.on('timeout', () => {
-                req.destroy();
-                reject(new Error('Refund request timeout'));
-            });
-
-            req.write(requestBodyString);
-            req.end();
-        });
-    }
-
-    /**
-     * Query refund status from MoMo
-     * @param {string} refundOrderId - Refund order ID
-     * @param {string} requestId - Refund request ID
-     * @returns {Object} Refund status
-     */
-    static async queryRefundStatus(refundOrderId, requestId) {
-        try {
-            // Create raw signature string for query
-            const rawSignature = `accessKey=${momoConfig.accessKey}&orderId=${refundOrderId}&partnerCode=${momoConfig.partnerCode}&requestId=${requestId}`;
-
-            // Create signature
-            const signature = crypto
-                .createHmac('sha256', momoConfig.secretKey)
-                .update(rawSignature)
-                .digest('hex');
-
-            // Create request body
-            const requestBody = {
-                partnerCode: momoConfig.partnerCode,
-                requestId: requestId,
-                orderId: refundOrderId,
-                lang: momoConfig.lang,
-                signature: signature,
-            };
-
-            // Send query request to MoMo
-            const response = await this.sendMoMoRefundQuery(requestBody);
-
-            return {
-                success: response.resultCode === 0,
-                refundOrderId: response.orderId,
-                requestId: response.requestId,
-                resultCode: response.resultCode,
-                message: response.message,
-                responseTime: response.responseTime,
-                refundTrans: response.refundTrans || [],
-                items: response.items || [],
-            };
-        } catch (error) {
-            console.error('MoMo refund query error:', error);
-            throw new InternalServerError('Failed to query MoMo refund status');
-        }
-    }
-
-    /**
-     * Send refund query request to MoMo API
-     * @param {Object} requestBody - Query request body
-     * @returns {Promise<Object>} MoMo query response
-     */
-    static async sendMoMoRefundQuery(requestBody) {
-        return new Promise((resolve, reject) => {
-            const requestBodyString = JSON.stringify(requestBody);
-
-            const options = {
-                hostname: 'test-payment.momo.vn',
-                port: 443,
-                path: '/v2/gateway/api/refund/query',
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(requestBodyString),
-                },
-                timeout: 30000, // 30 second timeout
-            };
-
-            const req = https.request(options, (res) => {
-                let data = '';
-
-                res.on('data', (chunk) => {
-                    data += chunk;
-                });
-
-                res.on('end', () => {
-                    try {
-                        const response = JSON.parse(data);
-                        resolve(response);
-                    } catch (error) {
-                        reject(
-                            new Error(
-                                'Failed to parse MoMo refund query response',
-                            ),
-                        );
-                    }
-                });
-            });
-
-            req.on('error', (error) => {
-                reject(new Error(`Refund query error: ${error.message}`));
-            });
-
-            req.on('timeout', () => {
-                req.destroy();
-                reject(new Error('Refund query timeout'));
-            });
-
-            req.write(requestBodyString);
-            req.end();
-        });
-    }
-
-    /**
-     * Store refund record in database
-     * @param {Object} refundData - Refund data to store
-     */
-    static async storeRefundRecord(refundData) {
-        try {
-            // Create a new payment record for the refund
-            await database.Payment.create({
-                order_id: refundData.originalOrderId,
-                payment_method: 'momo_refund',
-                amount: -Math.abs(refundData.amount), // Negative amount for refunds
-                status: 'pending',
-                transaction_id: refundData.requestId,
-                gateway_response: JSON.stringify({
-                    type: 'refund',
-                    refundOrderId: refundData.refundOrderId,
-                    originalTransId: refundData.transId,
-                    requestBody: refundData.requestBody,
-                    response: refundData.response,
-                }),
-                created_at: new Date(),
-            });
-
-            console.log(
-                `Refund record stored for order ${refundData.originalOrderId}`,
-            );
-        } catch (error) {
-            console.error('Error storing refund record:', error);
-            // Don't throw error here to avoid breaking refund flow
-        }
-    }
-
-    /**
-     * Update refund record after processing
-     * @param {Object} updateData - Update data
-     */
-    static async updateRefundRecord(updateData) {
-        try {
-            const status = updateData.resultCode === 0 ? 'completed' : 'failed';
-
-            await database.Payment.update(
-                {
-                    status: status,
-                    gateway_response: JSON.stringify({
-                        type: 'refund',
-                        ...JSON.parse(updateData.gatewayResponse || '{}'),
-                        resultCode: updateData.resultCode,
-                        processedAt: new Date(),
-                    }),
-                    updated_at: new Date(),
-                },
-                {
-                    where: {
-                        transaction_id: updateData.requestId,
-                        payment_method: 'momo_refund',
-                    },
-                },
-            );
-
-            console.log(
-                `Refund record updated for request ${updateData.requestId}`,
-            );
-        } catch (error) {
-            console.error('Error updating refund record:', error);
-        }
-    }
-
-    /**
-     * Process full refund for an order
-     * @param {string} orderId - Original order ID
-     * @param {string} reason - Refund reason
-     * @returns {Object} Refund result
-     */
-    static async processFullRefund(orderId, reason = 'Order return') {
-        try {
-            // Get the original payment record
-            const originalPayment = await database.Payment.findOne({
-                where: {
-                    order_id: orderId,
-                    payment_method: 'momo',
-                    status: 'completed',
-                },
-                order: [['created_at', 'DESC']],
-            });
-
-            if (!originalPayment) {
-                throw new BadRequestError(
-                    'Original completed payment not found',
-                );
-            }
-
-            // Extract original transaction ID from gateway response
-            let originalTransId = null;
-            try {
-                const gatewayData = JSON.parse(
-                    originalPayment.gateway_response || '{}',
-                );
-                if (gatewayData.ipnData) {
-                    const ipnData = JSON.parse(gatewayData.ipnData);
-                    originalTransId = ipnData.transId;
-                } else if (gatewayData.transactionId) {
-                    originalTransId = gatewayData.transactionId;
-                }
-            } catch (parseError) {
-                console.error('Error parsing gateway response:', parseError);
-            }
-
-            if (!originalTransId) {
-                throw new BadRequestError('Original transaction ID not found');
-            }
-
-            // Generate new refund order ID
-            const refundOrderId = `REFUND_${orderId}_${new Date().getTime()}`;
-
-            // Create refund request
-            const refundResult = await this.createRefund({
-                originalOrderId: orderId,
-                refundOrderId: refundOrderId,
-                amount: Math.abs(originalPayment.amount), // Full amount
-                transId: originalTransId,
-                description: `Full refund: ${reason}`,
-            });
-
-            // Update order status if refund successful
-            if (refundResult.success) {
-                await this.updateOrderStatusForRefund(
-                    orderId,
-                    'refunded',
-                    reason,
-                );
-            }
-
-            return refundResult;
-        } catch (error) {
-            console.error('Error processing full refund:', error);
-            throw new InternalServerError('Failed to process full refund');
-        }
-    }
-
-    /**
-     * Process partial refund for an order
-     * @param {string} orderId - Original order ID
-     * @param {number} refundAmount - Amount to refund
-     * @param {string} reason - Refund reason
-     * @param {Array} items - Items to refund (optional)
-     * @returns {Object} Refund result
-     */
-    static async processPartialRefund(
-        orderId,
-        refundAmount,
-        reason = 'Partial return',
-        items = [],
-    ) {
-        try {
-            // Get the original payment record
-            const originalPayment = await database.Payment.findOne({
-                where: {
-                    order_id: orderId,
-                    payment_method: 'momo',
-                    status: 'completed',
-                },
-                order: [['created_at', 'DESC']],
-            });
-
-            if (!originalPayment) {
-                throw new BadRequestError(
-                    'Original completed payment not found',
-                );
-            }
-
-            // Validate refund amount
-            if (refundAmount > Math.abs(originalPayment.amount)) {
-                throw new BadRequestError(
-                    'Refund amount cannot exceed original payment amount',
-                );
-            }
-
-            // Get total already refunded
-            const totalRefunded = await this.getTotalRefundedAmount(orderId);
-            if (
-                refundAmount + totalRefunded >
-                Math.abs(originalPayment.amount)
-            ) {
-                throw new BadRequestError(
-                    'Total refund amount would exceed original payment',
-                );
-            }
-
-            // Extract original transaction ID
-            let originalTransId = null;
-            try {
-                const gatewayData = JSON.parse(
-                    originalPayment.gateway_response || '{}',
-                );
-                if (gatewayData.ipnData) {
-                    const ipnData = JSON.parse(gatewayData.ipnData);
-                    originalTransId = ipnData.transId;
-                } else if (gatewayData.transactionId) {
-                    originalTransId = gatewayData.transactionId;
-                }
-            } catch (parseError) {
-                console.error('Error parsing gateway response:', parseError);
-            }
-
-            if (!originalTransId) {
-                throw new BadRequestError('Original transaction ID not found');
-            }
-
-            // Generate new refund order ID
-            const refundOrderId = `REFUND_${orderId}_${new Date().getTime()}`;
-
-            // Prepare transGroup for itemized refunds
-            let transGroup = [];
-            if (items && items.length > 0) {
-                transGroup = items.map((item) => ({
-                    itemId: item.itemId || item.productId,
-                    amount: item.amount,
-                    transId: originalTransId, // Use original transaction ID
-                }));
-            }
-
-            // Create refund request
-            const refundResult = await this.createRefund({
-                originalOrderId: orderId,
-                refundOrderId: refundOrderId,
-                amount: refundAmount,
-                transId: originalTransId,
-                description: `Partial refund: ${reason}`,
-                transGroup: transGroup,
-            });
-
-            // Update order status if refund successful
-            if (refundResult.success) {
-                const newTotalRefunded = totalRefunded + refundAmount;
-                const isFullyRefunded =
-                    newTotalRefunded >= Math.abs(originalPayment.amount);
-
-                await this.updateOrderStatusForRefund(
-                    orderId,
-                    isFullyRefunded ? 'refunded' : 'partially_refunded',
-                    reason,
-                );
-            }
-
-            return refundResult;
-        } catch (error) {
-            console.error('Error processing partial refund:', error);
-            throw new InternalServerError('Failed to process partial refund');
-        }
-    }
-
-    /**
-     * Get total refunded amount for an order
-     * @param {string} orderId - Order ID
-     * @returns {number} Total refunded amount
-     */
-    static async getTotalRefundedAmount(orderId) {
-        try {
-            const refunds = await database.Payment.findAll({
-                where: {
-                    order_id: orderId,
-                    payment_method: 'momo_refund',
-                    status: 'completed',
-                },
-            });
-
-            return refunds.reduce((total, refund) => {
-                return total + Math.abs(refund.amount);
-            }, 0);
-        } catch (error) {
-            console.error('Error getting total refunded amount:', error);
-            return 0;
-        }
-    }
-
-    /**
-     * Update order status for refund
-     * @param {string} orderId - Order ID
-     * @param {string} refundStatus - Refund status
-     * @param {string} reason - Refund reason
-     */
-    static async updateOrderStatusForRefund(orderId, refundStatus, reason) {
-        try {
-            const updateData = {
-                status:
-                    refundStatus === 'refunded'
-                        ? 'returned'
-                        : 'partially_returned',
-                note: `Refund processed: ${reason} at ${new Date().toLocaleString('vi-VN')}`,
-                updated_at: new Date(),
-            };
-
-            await database.Order.update(updateData, {
-                where: { id: orderId },
-            });
-
-            console.log(
-                `Order ${orderId} status updated to ${updateData.status}`,
-            );
-        } catch (error) {
-            console.error('Error updating order status for refund:', error);
-        }
-    }
-
-    /**
-     * Get refund history for an order
-     * @param {string} orderId - Order ID
-     * @returns {Array} Refund history
-     */
-    static async getRefundHistory(orderId) {
-        try {
-            const refunds = await database.Payment.findAll({
-                where: {
-                    order_id: orderId,
-                    payment_method: 'momo_refund',
-                },
-                order: [['created_at', 'DESC']],
-            });
-
-            return refunds.map((refund) => {
-                let gatewayData = {};
-                try {
-                    gatewayData = JSON.parse(refund.gateway_response || '{}');
-                } catch (parseError) {
-                    console.error(
-                        'Error parsing refund gateway response:',
-                        parseError,
-                    );
-                }
-
-                return {
-                    id: refund.id,
-                    amount: Math.abs(refund.amount),
-                    status: refund.status,
-                    transactionId: refund.transaction_id,
-                    refundOrderId: gatewayData.refundOrderId,
-                    createdAt: refund.created_at,
-                    updatedAt: refund.updated_at,
-                };
-            });
-        } catch (error) {
-            console.error('Error getting refund history:', error);
-            return [];
+            console.error('Get payment status error:', error);
+            throw error;
         }
     }
 }

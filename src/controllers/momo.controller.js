@@ -1,15 +1,26 @@
 'use strict';
 
 const MomoPaymentService = require('../services/payment/momo.service');
-const { SuccessResponse, CREATED } = require('../core/success.response');
+const { SuccessResponse, CREATED, OK } = require('../core/success.response');
 const { BadRequestError } = require('../core/error.response');
 
 class MomoPaymentController {
     /**
-     * Create MoMo payment
+     * Create MoMo payment - MAIN FUNCTION 1
      */
     createPayment = async (req, res, next) => {
-        const { orderId, amount, orderInfo, extraData } = req.body;
+        const {
+            orderId,
+            amount,
+            orderInfo,
+            extraData,
+            items,
+            deliveryInfo,
+            userInfo,
+            referenceId,
+            storeName,
+            subPartnerCode,
+        } = req.body;
 
         if (!orderId || !amount) {
             throw new BadRequestError('orderId and amount are required');
@@ -22,57 +33,67 @@ class MomoPaymentController {
                 amount,
                 orderInfo,
                 extraData,
+                items,
+                deliveryInfo,
+                userInfo,
+                referenceId,
+                storeName,
+                subPartnerCode,
             }),
         }).send(res);
     };
 
     /**
-     * Handle MoMo return URL (when user returns from MoMo app/web)
+     * Handle MoMo IPN callback - MAIN FUNCTION 2
      */
-    handleReturn = async (req, res, next) => {
-        try {
-            const { orderId: momoOrderId, resultCode, message } = req.query;
+    handleIpn = async (req, res, next) => {
+        const ipnData = req.body;
 
-            // Extract internal order ID from MoMo order ID
-            let internalOrderId = momoOrderId;
-            if (momoOrderId && momoOrderId.startsWith('ORDER_')) {
-                const parts = momoOrderId.split('_');
-                if (parts.length >= 2) {
-                    internalOrderId = parts[1]; // Extract order ID from ORDER_{id}_{timestamp}_{random}
-                }
-            }
+        const result = await MomoPaymentService.handleIpnCallback(ipnData);
 
-            if (resultCode === '0') {
-                // Payment successful - redirect to success page
-                res.redirect(
-                    `${process.env.FRONTEND_URL}/payment/success?orderId=${internalOrderId}`,
-                );
-            } else {
-                // Payment failed - redirect to failure page
-                res.redirect(
-                    `${process.env.FRONTEND_URL}/payment/failed?orderId=${internalOrderId}&message=${encodeURIComponent(message)}`,
-                );
-            }
-        } catch (error) {
-            console.error('MoMo return handling error:', error);
-            res.redirect(`${process.env.FRONTEND_URL}/payment/error`);
-        }
+        new OK({
+            message: 'IPN processed successfully',
+            metadata: result,
+        }).send(res);
     };
 
     /**
-     * Handle MoMo IPN (Instant Payment Notification)
+     * Check transaction status - MAIN FUNCTION 3
      */
-    handleIPN = async (req, res, next) => {
-        try {
-            const result = await MomoPaymentService.handleIPN(req.body);
-            res.status(200).json(result);
-        } catch (error) {
-            console.error('MoMo IPN handling error:', error);
-            res.status(500).json({
-                resultCode: 1,
-                message: 'Error processing IPN',
-            });
+    checkTransactionStatus = async (req, res, next) => {
+        const { orderId } = req.params;
+
+        if (!orderId) {
+            throw new BadRequestError('orderId is required');
         }
+
+        new OK({
+            message: 'Kiểm tra trạng thái giao dịch thành công',
+            metadata: await MomoPaymentService.checkTransactionStatus(orderId),
+        }).send(res);
+    };
+
+    /**
+     * Refund transaction - MAIN FUNCTION 4
+     */
+    refundTransaction = async (req, res, next) => {
+        const { orderId, transId, amount, description } = req.body;
+
+        if (!orderId || !transId || !amount) {
+            throw new BadRequestError(
+                'orderId, transId, and amount are required',
+            );
+        }
+
+        new OK({
+            message: 'Hoàn tiền giao dịch thành công',
+            metadata: await MomoPaymentService.refundTransaction(
+                orderId,
+                transId,
+                amount,
+                description,
+            ),
+        }).send(res);
     };
 
     /**
@@ -81,57 +102,31 @@ class MomoPaymentController {
     getPaymentStatus = async (req, res, next) => {
         const { orderId } = req.params;
 
-        new SuccessResponse({
+        if (!orderId) {
+            throw new BadRequestError('orderId is required');
+        }
+
+        new OK({
             message: 'Lấy trạng thái thanh toán thành công',
             metadata: await MomoPaymentService.getPaymentStatus(orderId),
         }).send(res);
     };
 
     /**
-     * Verify signature (for testing purposes)
+     * Handle MoMo return URL (when user returns from MoMo app/web)
      */
-    verifySignature = async (req, res, next) => {
-        const isValid = MomoPaymentService.verifySignature(req.body);
+    handleReturn = async (req, res, next) => {
+        try {
+            const { orderId, requestId, resultCode, message } = req.query;
 
-        new SuccessResponse({
-            message: 'Xác thực chữ ký',
-            metadata: { isValid },
-        }).send(res);
-    };
+            // You can redirect to your frontend with the result
+            const redirectUrl = `${process.env.FRONTEND_URL}/payment/result?orderId=${orderId}&resultCode=${resultCode}&message=${encodeURIComponent(message)}`;
 
-    /**
-     * Check payment timeout status
-     */
-    getPaymentExpirationStatus = async (req, res, next) => {
-        const { orderId } = req.params;
-
-        new SuccessResponse({
-            message: 'Lấy trạng thái hết hạn thanh toán thành công',
-            metadata: await MomoPaymentService.getPaymentTimeoutStatus(orderId),
-        }).send(res);
-    };
-
-    /**
-     * Check and process expired payments (admin/system endpoint)
-     */
-    checkExpiredPayments = async (req, res, next) => {
-        new SuccessResponse({
-            message: 'Kiểm tra thanh toán hết hạn thành công',
-            metadata: await MomoPaymentService.checkExpiredPayments(),
-        }).send(res);
-    };
-
-    /**
-     * Cancel pending payment
-     */
-    cancelPayment = async (req, res, next) => {
-        const { orderId } = req.params;
-        const { reason } = req.body;
-
-        new SuccessResponse({
-            message: 'Hủy thanh toán thành công',
-            metadata: await MomoPaymentService.cancelPayment(orderId, reason),
-        }).send(res);
+            res.redirect(redirectUrl);
+        } catch (error) {
+            console.error('MoMo return handler error:', error);
+            res.redirect(`${process.env.FRONTEND_URL}/payment/error`);
+        }
     };
 }
 

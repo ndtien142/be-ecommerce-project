@@ -478,13 +478,15 @@ class OrderService {
         // Start transaction
         const transaction = await database.sequelize.transaction();
         try {
+            beCart.status = 'ordered';
+            await beCart.save({ transaction });
             // Create order
             const order = await database.Order.create(
                 {
                     user_id: userId,
                     address_id: addressId,
-                    payment_id: null, // will update after payment created
-                    status: 'pending_payment', // Changed status for payment pending
+                    payment_id: null,
+                    status: 'pending_confirmation',
                     total_amount: totalAmount,
                     note,
                     ordered_date: new Date(),
@@ -508,37 +510,31 @@ class OrderService {
                 );
             }
 
-            // Create payment record
-            const payment = await database.Payment.create(
-                {
-                    order_id: order.id,
-                    payment_method: 'momo',
-                    amount: totalAmount,
-                    status: 'pending',
-                },
-                { transaction },
-            );
-            order.payment_id = payment.id;
             await order.save({ transaction });
 
             // Create MoMo payment first, before committing transaction
             // Generate unique MoMo order ID to avoid duplicates
-            const momoOrderId = `ORDER_${order.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const momoOrderId = `ORDER_${order.id}_${new Date().getTime()}_${Math.random().toString(36).substr(2, 9)}`;
 
             const momoPayment = await MomoPaymentService.createPayment({
-                orderId: momoOrderId,
+                orderId: order.id,
+                momoOrderId: momoOrderId,
                 amount: Math.round(totalAmount), // MoMo requires integer amount
                 orderInfo: orderInfo,
                 extraData: extraData,
                 internalOrderId: order.id.toString(), // Pass internal order ID for mapping
             });
 
+            const payment = await database.Payment.create(momoPayment.payment);
+
+            order.payment_id = payment.id; // Set payment ID in order
+            await order.save({ transaction });
+
             // Only commit transaction after MoMo payment is successfully created
             await transaction.commit();
 
             return {
                 order: toCamel(order.toJSON()),
-                payment: toCamel(payment.toJSON()),
                 momoPayment: momoPayment,
             };
         } catch (error) {

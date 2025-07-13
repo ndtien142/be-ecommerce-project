@@ -9,9 +9,8 @@ const config = {
     redirectUrl:
         process.env.MOMO_REDIRECT_URL ||
         'http://localhost:3000/payment/momo/return',
-    ipnUrl:
-        process.env.MOMO_IPN_URL || 'http://localhost:3000/payment/momo/ipn',
-    requestType: 'payWithMethod',
+    ipnUrl: process.env.MOMO_IPN_URL || 'http://localhost:3055/api/v1/momo/ipn',
+    requestType: 'captureWallet', // Updated to match documentation
     partnerName: 'Test',
     storeId: 'MomoTestStore',
     lang: 'vi',
