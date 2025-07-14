@@ -568,6 +568,116 @@ class AccessService {
                 : false,
         };
     };
+
+    // ===============================
+    // GOOGLE OAUTH METHODS
+    // ===============================
+
+    /**
+     * Handle Google OAuth callback
+     */
+    static handleGoogleCallback = async (user) => {
+        try {
+            // Generate key pair for JWT
+            const privateKey = crypto.randomBytes(64).toString('hex');
+            const publicKey = crypto.randomBytes(64).toString('hex');
+
+            // Create token pair
+            const tokens = await createTokenPair(
+                { userId: user.id, email: user.email },
+                publicKey,
+                privateKey,
+            );
+
+            // Save key token
+            await createKeyToken({
+                userId: user.id,
+                privateKey,
+                publicKey,
+                refreshToken: tokens.refreshToken,
+            });
+
+            return {
+                user: getInfoData({
+                    fields: ['id', 'name', 'email', 'avatar', 'role'],
+                    object: user,
+                }),
+                tokens,
+            };
+        } catch (error) {
+            console.error('Google OAuth callback error:', error);
+            throw error;
+        }
+    };
+
+    /**
+     * Link Google account to existing user
+     */
+    static linkGoogleAccount = async (userId, googleId) => {
+        try {
+            const user = await database.User.findByPk(userId);
+            if (!user) {
+                throw new NotFoundError('User not found');
+            }
+
+            // Check if Google ID is already linked to another account
+            const existingGoogleUser = await database.User.findOne({
+                where: { google_id: googleId },
+            });
+
+            if (existingGoogleUser && existingGoogleUser.id !== userId) {
+                throw new BadRequestError(
+                    'Google account is already linked to another user',
+                );
+            }
+
+            // Link Google account
+            user.google_id = googleId;
+            await user.save();
+
+            return {
+                user: getInfoData({
+                    fields: ['id', 'name', 'email', 'avatar', 'google_id'],
+                    object: user,
+                }),
+            };
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    /**
+     * Unlink Google account from user
+     */
+    static unlinkGoogleAccount = async (userId) => {
+        try {
+            const user = await database.User.findByPk(userId);
+            if (!user) {
+                throw new NotFoundError('User not found');
+            }
+
+            if (!user.google_id) {
+                throw new BadRequestError('Google account is not linked');
+            }
+
+            // Check if user has password (can't unlink if no password)
+            if (!user.user_pass) {
+                throw new BadRequestError(
+                    'Cannot unlink Google account without setting a password first',
+                );
+            }
+
+            // Unlink Google account
+            user.google_id = null;
+            await user.save();
+
+            return {
+                message: 'Google account unlinked successfully',
+            };
+        } catch (error) {
+            throw error;
+        }
+    };
 }
 
 module.exports = AccessService;

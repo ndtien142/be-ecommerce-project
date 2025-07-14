@@ -4,6 +4,7 @@ const express = require('express');
 const accessController = require('../../controllers/access.controller');
 const { asyncHandler } = require('../../helpers/asyncHandler');
 const { authenticationV2 } = require('../../auth/authUtils');
+const passport = require('../../configs/passport.config');
 const router = express.Router();
 
 /**
@@ -378,6 +379,87 @@ const router = express.Router();
  *         description: User not found
  */
 
+// ===============================
+// GOOGLE OAUTH ROUTES
+// ===============================
+
+/**
+ * @swagger
+ * /auth/google:
+ *   get:
+ *     summary: Initiate Google OAuth login
+ *     tags: [Access]
+ *     description: Redirects to Google OAuth consent screen
+ *     responses:
+ *       302:
+ *         description: Redirect to Google OAuth
+ */
+
+/**
+ * @swagger
+ * /auth/google/callback:
+ *   get:
+ *     summary: Handle Google OAuth callback
+ *     tags: [Access]
+ *     description: Handles the callback from Google OAuth
+ *     parameters:
+ *       - in: query
+ *         name: code
+ *         schema:
+ *           type: string
+ *         description: OAuth authorization code
+ *       - in: query
+ *         name: state
+ *         schema:
+ *           type: string
+ *         description: OAuth state parameter
+ *     responses:
+ *       302:
+ *         description: Redirect to frontend with tokens
+ */
+
+/**
+ * @swagger
+ * /auth/google/link:
+ *   post:
+ *     summary: Link Google account to existing user
+ *     tags: [Access]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - googleId
+ *             properties:
+ *               googleId:
+ *                 type: string
+ *                 description: Google user ID
+ *     responses:
+ *       200:
+ *         description: Google account linked successfully
+ *       400:
+ *         description: Google account already linked to another user
+ */
+
+/**
+ * @swagger
+ * /auth/google/unlink:
+ *   delete:
+ *     summary: Unlink Google account from user
+ *     tags: [Access]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Google account unlinked successfully
+ *       400:
+ *         description: Cannot unlink Google account without password
+ */
+
 router.post('/signup', asyncHandler(accessController.signUp));
 router.post('/login', asyncHandler(accessController.login));
 router.post(
@@ -397,6 +479,32 @@ router.post(
 router.post(
     '/check-verification-status',
     asyncHandler(accessController.checkEmailVerificationStatus),
+);
+
+// Google OAuth routes
+router.get(
+    '/google',
+    passport.authenticate('google', { scope: ['profile', 'email'] }),
+);
+
+router.get(
+    '/google/callback',
+    passport.authenticate('google', {
+        failureRedirect: '/login?error=oauth_failed',
+    }),
+    asyncHandler(accessController.googleCallback),
+);
+
+router.post(
+    '/google/link',
+    authenticationV2,
+    asyncHandler(accessController.linkGoogleAccount),
+);
+
+router.delete(
+    '/google/unlink',
+    authenticationV2,
+    asyncHandler(accessController.unlinkGoogleAccount),
 );
 
 router.use(authenticationV2);

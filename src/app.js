@@ -4,9 +4,10 @@ const express = require('express');
 const morgan = require('morgan');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-// const { default: helmet } = require('helmet');
 const helmet = require('helmet');
 const compression = require('compression');
+const session = require('express-session');
+const passport = require('./configs/passport.config');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./configs/swagger.config');
 
@@ -50,7 +51,22 @@ app.use(
 );
 app.use(compression());
 
+// Configure session for Google OAuth
+app.use(
+    session({
+        secret: process.env.SESSION_SECRET || 'your-secret-key',
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+            secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+            maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        },
+    }),
+);
+
 // init middlewares
+app.use(passport.initialize());
+app.use(passport.session());
 
 // init db
 require('./models/index');

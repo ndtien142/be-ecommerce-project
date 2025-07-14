@@ -19,7 +19,7 @@ function model(sequelize) {
         },
         user_pass: {
             type: DataTypes.STRING(255),
-            allowNull: false,
+            allowNull: true, // Allow null for Google OAuth users
         },
         user_nickname: {
             type: DataTypes.STRING(60),
@@ -64,6 +64,15 @@ function model(sequelize) {
         },
         email_verification_expires: {
             type: DataTypes.DATE,
+            allowNull: true,
+        },
+        google_id: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+            unique: true,
+        },
+        avatar: {
+            type: DataTypes.STRING(500),
             allowNull: true,
         },
     };

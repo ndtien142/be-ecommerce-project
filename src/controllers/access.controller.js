@@ -67,6 +67,74 @@ class AccessController {
             ),
         }).send(res);
     };
+
+    // ===============================
+    // GOOGLE OAUTH METHODS
+    // ===============================
+
+    /**
+     * Initiate Google OAuth login
+     */
+    googleLogin = async (req, res, next) => {
+        // This will be handled by passport middleware
+        // Just redirect to Google OAuth
+    };
+
+    /**
+     * Handle Google OAuth callback
+     */
+    googleCallback = async (req, res, next) => {
+        try {
+            if (!req.user) {
+                return res.redirect(
+                    `${process.env.FRONTEND_URL}/login?error=oauth_failed`,
+                );
+            }
+
+            const result = await AccessService.handleGoogleCallback(req.user);
+
+            // Redirect to frontend with tokens
+            const queryParams = new URLSearchParams({
+                access_token: result.tokens.accessToken,
+                refresh_token: result.tokens.refreshToken,
+                user: JSON.stringify(result.user),
+            });
+
+            res.redirect(
+                `${process.env.FRONTEND_URL}/auth/callback?${queryParams}`,
+            );
+        } catch (error) {
+            console.error('Google OAuth callback error:', error);
+            res.redirect(
+                `${process.env.FRONTEND_URL}/login?error=oauth_failed`,
+            );
+        }
+    };
+
+    /**
+     * Link Google account to existing user
+     */
+    linkGoogleAccount = async (req, res, next) => {
+        const userId = req.user.userId;
+        new SuccessResponse({
+            message: 'Google account linked successfully',
+            metadata: await AccessService.linkGoogleAccount(
+                userId,
+                req.body.googleId,
+            ),
+        }).send(res);
+    };
+
+    /**
+     * Unlink Google account from user
+     */
+    unlinkGoogleAccount = async (req, res, next) => {
+        const userId = req.user.userId;
+        new SuccessResponse({
+            message: 'Google account unlinked successfully',
+            metadata: await AccessService.unlinkGoogleAccount(userId),
+        }).send(res);
+    };
 }
 
 module.exports = new AccessController();
