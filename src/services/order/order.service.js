@@ -344,79 +344,11 @@ class OrderService {
         };
     }
 
-    static async updateOrderStatus(id, status) {
-        const [affectedRows] = await database.Order.update(
-            { status },
-            { where: { id } },
-        );
-        if (!affectedRows)
-            throw new NotFoundError(
-                'Không tìm thấy đơn hàng hoặc không được cập nhật',
-            );
+    // DEPRECATED: Sử dụng OrderWorkflowService.confirmOrder() thay thế
+    // static async updateOrderStatus(id, status) { ... }
 
-        const updatedOrder = await OrderService.getOrderById(id);
-
-        // Send order status update email
-        try {
-            if (updatedOrder.user && updatedOrder.user.email) {
-                await EmailService.sendOrderStatusUpdateEmail(
-                    updatedOrder.user.email,
-                    updatedOrder.user.firstName || updatedOrder.user.username,
-                    updatedOrder,
-                    status,
-                );
-            }
-        } catch (emailError) {
-            console.error(
-                'Failed to send order status update email:',
-                emailError,
-            );
-            // Don't throw error - email failure shouldn't break status update
-        }
-
-        return updatedOrder;
-    }
-
-    static async cancelOrder(id, reason = '') {
-        const order = await database.Order.findByPk(id, {
-            include: [{ model: database.User, as: 'user' }],
-        });
-
-        if (!order) {
-            throw new NotFoundError('Không tìm thấy đơn hàng');
-        }
-
-        const [affectedRows] = await database.Order.update(
-            { status: 'cancelled' },
-            { where: { id } },
-        );
-
-        if (!affectedRows) {
-            throw new NotFoundError('Không thể hủy đơn hàng');
-        }
-
-        const cancelledOrder = await OrderService.getOrderById(id);
-
-        // Send order cancellation email
-        try {
-            if (order.user && order.user.email) {
-                await EmailService.sendOrderCancellationEmail(
-                    order.user.email,
-                    order.user.first_name || order.user.username,
-                    cancelledOrder,
-                    reason,
-                );
-            }
-        } catch (emailError) {
-            console.error(
-                'Failed to send order cancellation email:',
-                emailError,
-            );
-            // Don't throw error - email failure shouldn't break cancellation
-        }
-
-        return cancelledOrder;
-    }
+    // DEPRECATED: Sử dụng OrderWorkflowService.cancelOrder() thay thế
+    // static async cancelOrder(id, reason = '') { ... }
 
     static async updateOrderAddress(orderId, newAddressId) {
         const order = await database.Order.findByPk(orderId);

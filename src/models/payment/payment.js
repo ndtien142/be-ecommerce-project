@@ -41,7 +41,6 @@ module.exports = (sequelize) => {
                     'cancelled',
                     'expired',
                     'refunded',
-                    'partially_refunded',
                 ),
                 allowNull: false,
                 defaultValue: 'pending',

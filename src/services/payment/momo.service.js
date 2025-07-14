@@ -136,8 +136,6 @@ class MomoPaymentService {
             // Order status tracks: pending, confirmed, processing, shipped, delivered, cancelled
             // Payment status tracks: pending, completed, failed, refunded, expired
 
-            // Store payment record
-
             return {
                 payUrl: response.payUrl,
                 deeplink: response.deeplink,
@@ -228,6 +226,26 @@ class MomoPaymentService {
                 },
             );
 
+            await database.OrderLog.create({
+                order_id: payment.order_id,
+                from_status: 'pending_confirmation',
+                to_status: 'pending_confirmation', // Payment update doesn't change order status
+                action: 'payment_completed',
+                actor_type: 'payment_gateway',
+                actor_id: null,
+                actor_name: 'MoMo',
+                note: `Payment status updated to ${paymentStatus} via MoMo IPN (resultCode: ${resultCode})`,
+                metadata: JSON.stringify({
+                    amount,
+                    transId,
+                    payType,
+                    message,
+                    ipn: true,
+                    payment_status: paymentStatus,
+                    result_code: resultCode,
+                }),
+            });
+
             // Note: Order status should be updated by order management system
             // based on business logic, not directly tied to payment status
 
@@ -257,9 +275,27 @@ class MomoPaymentService {
                 throw new BadRequestError('orderId is required');
             }
 
-            const payment = await database.Payment.findOne({
+            // First try to find by order_id, then by external_order_id (momo order id)
+            let payment = await database.Payment.findOne({
                 where: { order_id: orderId, payment_method: 'momo' },
             });
+
+            if (!payment) {
+                // Try to find by external_order_id (momo order id)
+                payment = await database.Payment.findOne({
+                    where: {
+                        external_order_id: orderId,
+                        payment_method: 'momo',
+                    },
+                });
+            }
+
+            if (!payment) {
+                // Try to find by transaction_id
+                payment = await database.Payment.findOne({
+                    where: { transaction_id: orderId, payment_method: 'momo' },
+                });
+            }
 
             if (!payment) {
                 throw new BadRequestError('Payment record not found');
