@@ -325,14 +325,22 @@ router.get(
 );
 router.get('/admin', asyncHandler(orderController.getOrdersByAdmin));
 router.get('/admin/:id', asyncHandler(orderController.getOrderById));
-router.patch(
-    '/admin/:id/status',
-    asyncHandler(orderController.updateOrderStatus),
-);
-router.patch('/admin/:id/cancel', asyncHandler(orderController.cancelOrder));
+
+// DEPRECATED: Sử dụng /workflow/confirm thay thế
+// router.patch('/admin/:id/status', asyncHandler(orderController.updateOrderStatus));
+
+// DEPRECATED: Sử dụng /workflow/cancel thay thế
+// router.patch('/admin/:id/cancel', asyncHandler(orderController.cancelOrder));
+
 router.patch(
     '/user/:id/address',
     asyncHandler(orderController.updateOrderAddress),
 );
+
+// Add workflow routes
+router.use('/workflow', require('./workflow'));
+
+// Add logs routes
+router.use('/logs', require('./logs'));
 
 module.exports = router;

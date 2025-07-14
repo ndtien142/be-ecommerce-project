@@ -44,6 +44,7 @@ const Category = require('./categories/categories')(sequelize);
 // Import order and payment models
 const Order = require('./order/order')(sequelize);
 const OrderLineItem = require('./order/orderLineItem')(sequelize);
+const OrderLog = require('./order/orderLog')(sequelize);
 
 // Import cart models
 const Cart = require('./cart/cart')(sequelize);
@@ -94,6 +95,7 @@ database.Category = Category;
 // Order and Payment models
 database.Order = Order;
 database.OrderLineItem = OrderLineItem;
+database.OrderLog = OrderLog;
 
 // Cart models
 database.Cart = Cart;
@@ -282,6 +284,17 @@ database.Order.hasMany(database.OrderLineItem, {
     as: 'lineItems',
 });
 database.OrderLineItem.belongsTo(database.Order, {
+    foreignKey: 'order_id',
+    as: 'order',
+});
+
+// Order and OrderLog relationships
+database.Order.hasMany(database.OrderLog, {
+    foreignKey: 'order_id',
+    as: 'logs',
+});
+
+database.OrderLog.belongsTo(database.Order, {
     foreignKey: 'order_id',
     as: 'order',
 });

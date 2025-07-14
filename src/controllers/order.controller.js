@@ -31,22 +31,11 @@ class OrderController {
         }).send(res);
     };
 
-    updateOrderStatus = async (req, res, next) => {
-        new SuccessResponse({
-            message: 'Cập nhật trạng thái đơn hàng thành công',
-            metadata: await OrderService.updateOrderStatus(
-                req.params.id,
-                req.body.status,
-            ),
-        }).send(res);
-    };
-
-    cancelOrder = async (req, res, next) => {
-        new SuccessResponse({
-            message: 'Hủy đơn hàng thành công',
-            metadata: await OrderService.cancelOrder(req.params.id),
-        }).send(res);
-    };
+    // DEPRECATED: Sử dụng OrderWorkflowController.confirmOrder() thay thế
+    // updateOrderStatus = async (req, res, next) => { ... }
+    
+    // DEPRECATED: Sử dụng OrderWorkflowController.cancelOrder() thay thế
+    // cancelOrder = async (req, res, next) => { ... }
 
     updateOrderAddress = async (req, res, next) => {
         new SuccessResponse({
