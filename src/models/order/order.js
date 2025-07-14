@@ -24,11 +24,18 @@ module.exports = (sequelize) => {
         },
         status: {
             type: DataTypes.ENUM(
+                'pending_payment', // Chờ thanh toán (for MoMo)
+                'payment_failed', // Thanh toán thất bại
+                'payment_expired', // Thanh toán hết hạn
+                'payment_cancelled', // Thanh toán bị hủy
                 'pending_confirmation', // Chờ xác nhận
                 'pending_pickup', // Chờ lấy hàng
                 'shipping', // Chờ giao hàng
                 'delivered', // Đã giao
-                'returned', // Trả hàng
+                'returned', // Trả hàng (hoàn toàn)
+                'partially_returned', // Trả hàng một phần
+                'refunded', // Đã hoàn tiền
+                'partially_refunded', // Hoàn tiền một phần
                 'cancelled', // Đã hủy
             ),
             allowNull: false,

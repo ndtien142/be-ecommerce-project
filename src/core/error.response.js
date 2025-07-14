@@ -54,10 +54,20 @@ class ForbiddenError extends ErrorResponse {
     }
 }
 
+class InternalServerError extends ErrorResponse {
+    constructor(
+        message = ReasonPhrases.INTERNAL_SERVER_ERROR,
+        status = StatusCodes.INTERNAL_SERVER_ERROR,
+    ) {
+        super(message, status);
+    }
+}
+
 module.exports = {
     ConflictRequestError,
     BadRequestError,
     AuthFailureError,
     NotFoundError,
     ForbiddenError,
+    InternalServerError,
 };
