@@ -6,7 +6,7 @@ module.exports = function checkRole(...allowedRoles) {
                 .status(401)
                 .json({ message: 'Unauthorized: No user or role found' });
         }
-        if (!allowedRoles.includes(req.user.role)) {
+        if (!allowedRoles.includes(req.user.role.name)) {
             return res
                 .status(403)
                 .json({ message: 'Forbidden: Insufficient role' });
