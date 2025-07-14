@@ -161,6 +161,229 @@ class EmailService {
             };
         }
     }
+
+    // Order-related email methods
+    async sendOrderConfirmationEmail(email, username, order) {
+        const mailOptions = {
+            from: process.env.EMAIL_FROM || 'noreply@yourapp.com',
+            to: email,
+            subject: `Xác nhận đơn hàng #${order.id}`,
+            html: `
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+                    <h2 style="color: #333; text-align: center;">Xác nhận đơn hàng</h2>
+                    <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <p>Xin chào <strong>${username}</strong>,</p>
+                        <p>Cảm ơn bạn đã đặt hàng! Đơn hàng của bạn đã được xác nhận và đang được xử lý.</p>
+                        
+                        <div style="background: white; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                            <h3 style="color: #333; margin-top: 0;">Thông tin đơn hàng</h3>
+                            <p><strong>Mã đơn hàng:</strong> #${order.id}</p>
+                            <p><strong>Ngày đặt:</strong> ${new Date(order.orderedDate || order.ordered_date).toLocaleDateString('vi-VN')}</p>
+                            <p><strong>Tổng tiền:</strong> ${(order.totalAmount || order.total_amount).toLocaleString('vi-VN')} VND</p>
+                            <p><strong>Trạng thái:</strong> ${this.getOrderStatusText(order.status)}</p>
+                        </div>
+
+                        ${order.lineItems ? this.formatOrderItems(order.lineItems) : ''}
+
+                        <div style="background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                            <h4 style="color: #1976d2; margin-top: 0;">Thông tin giao hàng</h4>
+                            ${order.address ? `
+                                <p><strong>Địa chỉ:</strong> ${order.address.fullAddress || order.address.full_address}</p>
+                                <p><strong>Số điện thoại:</strong> ${order.address.phoneNumber || order.address.phone_number}</p>
+                            ` : ''}
+                            <p><strong>Phương thức vận chuyển:</strong> ${order.shippingMethod?.name || 'Chưa xác định'}</p>
+                            <p><strong>Phí vận chuyển:</strong> ${(order.shippingFee || order.shipping_fee || 0).toLocaleString('vi-VN')} VND</p>
+                        </div>
+
+                        <p>Bạn có thể theo dõi đơn hàng của mình tại:</p>
+                        <div style="text-align: center; margin: 20px 0;">
+                            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/orders/${order.id}" 
+                               style="background: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                                Theo dõi đơn hàng
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            `,
+        };
+
+        try {
+            const info = await this.transporter.sendMail(mailOptions);
+            return {
+                success: true,
+                messageId: info.messageId,
+            };
+        } catch (error) {
+            console.error('Order confirmation email sending failed:', error);
+            return {
+                success: false,
+                error: error.message,
+            };
+        }
+    }
+
+    async sendOrderStatusUpdateEmail(email, username, order, newStatus) {
+        const statusText = this.getOrderStatusText(newStatus);
+        const statusColor = this.getOrderStatusColor(newStatus);
+
+        const mailOptions = {
+            from: process.env.EMAIL_FROM || 'noreply@yourapp.com',
+            to: email,
+            subject: `Cập nhật đơn hàng #${order.id} - ${statusText}`,
+            html: `
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+                    <h2 style="color: #333; text-align: center;">Cập nhật đơn hàng</h2>
+                    <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <p>Xin chào <strong>${username}</strong>,</p>
+                        <p>Đơn hàng #${order.id} của bạn đã được cập nhật trạng thái.</p>
+                        
+                        <div style="text-align: center; margin: 30px 0;">
+                            <div style="background: ${statusColor}; color: white; padding: 15px; border-radius: 8px; display: inline-block; font-size: 18px; font-weight: bold;">
+                                ${statusText}
+                            </div>
+                        </div>
+
+                        <div style="background: white; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                            <h3 style="color: #333; margin-top: 0;">Thông tin đơn hàng</h3>
+                            <p><strong>Mã đơn hàng:</strong> #${order.id}</p>
+                            <p><strong>Tổng tiền:</strong> ${(order.totalAmount || order.total_amount).toLocaleString('vi-VN')} VND</p>
+                            ${order.trackingNumber ? `<p><strong>Mã vận đơn:</strong> ${order.trackingNumber}</p>` : ''}
+                        </div>
+
+                        ${this.getStatusSpecificMessage(newStatus)}
+
+                        <div style="text-align: center; margin: 20px 0;">
+                            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/orders/${order.id}" 
+                               style="background: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                                Xem chi tiết đơn hàng
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            `,
+        };
+
+        try {
+            const info = await this.transporter.sendMail(mailOptions);
+            return {
+                success: true,
+                messageId: info.messageId,
+            };
+        } catch (error) {
+            console.error('Order status update email sending failed:', error);
+            return {
+                success: false,
+                error: error.message,
+            };
+        }
+    }
+
+    async sendOrderCancellationEmail(email, username, order, reason = '') {
+        const mailOptions = {
+            from: process.env.EMAIL_FROM || 'noreply@yourapp.com',
+            to: email,
+            subject: `Đơn hàng #${order.id} đã được hủy`,
+            html: `
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+                    <h2 style="color: #333; text-align: center;">Đơn hàng đã được hủy</h2>
+                    <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <p>Xin chào <strong>${username}</strong>,</p>
+                        <p>Đơn hàng #${order.id} của bạn đã được hủy thành công.</p>
+                        
+                        <div style="background: #ffebee; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #f44336;">
+                            <h3 style="color: #d32f2f; margin-top: 0;">Thông tin hủy đơn</h3>
+                            <p><strong>Mã đơn hàng:</strong> #${order.id}</p>
+                            <p><strong>Tổng tiền:</strong> ${(order.totalAmount || order.total_amount).toLocaleString('vi-VN')} VND</p>
+                            <p><strong>Thời gian hủy:</strong> ${new Date().toLocaleString('vi-VN')}</p>
+                            ${reason ? `<p><strong>Lý do:</strong> ${reason}</p>` : ''}
+                        </div>
+
+                        <div style="background: #e8f5e8; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #4caf50;">
+                            <h4 style="color: #388e3c; margin-top: 0;">Thông tin hoàn tiền</h4>
+                            <p>Nếu bạn đã thanh toán cho đơn hàng này, số tiền sẽ được hoàn lại trong vòng 3-5 ngày làm việc.</p>
+                            <p>Chúng tôi sẽ gửi thông báo khi việc hoàn tiền được hoàn tất.</p>
+                        </div>
+
+                        <p>Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với chúng tôi.</p>
+                    </div>
+                </div>
+            `,
+        };
+
+        try {
+            const info = await this.transporter.sendMail(mailOptions);
+            return {
+                success: true,
+                messageId: info.messageId,
+            };
+        } catch (error) {
+            console.error('Order cancellation email sending failed:', error);
+            return {
+                success: false,
+                error: error.message,
+            };
+        }
+    }
+
+    // Helper methods for order emails
+    getOrderStatusText(status) {
+        const statusMap = {
+            'pending_confirmation': 'Chờ xác nhận',
+            'pending_pickup': 'Chờ lấy hàng',
+            'shipping': 'Đang giao hàng',
+            'delivered': 'Đã giao hàng',
+            'returned': 'Đã trả hàng',
+            'cancelled': 'Đã hủy'
+        };
+        return statusMap[status] || status;
+    }
+
+    getOrderStatusColor(status) {
+        const colorMap = {
+            'pending_confirmation': '#ff9800',
+            'pending_pickup': '#2196f3',
+            'shipping': '#9c27b0',
+            'delivered': '#4caf50',
+            'returned': '#f44336',
+            'cancelled': '#9e9e9e'
+        };
+        return colorMap[status] || '#666';
+    }
+
+    getStatusSpecificMessage(status) {
+        const messages = {
+            'pending_confirmation': '<p>Đơn hàng của bạn đang chờ xác nhận từ cửa hàng.</p>',
+            'pending_pickup': '<p>Đơn hàng đã được xác nhận và đang chờ lấy hàng.</p>',
+            'shipping': '<p>Đơn hàng đang trên đường giao đến bạn. Vui lòng chú ý điện thoại!</p>',
+            'delivered': '<p>Đơn hàng đã được giao thành công. Cảm ơn bạn đã mua hàng!</p>',
+            'returned': '<p>Đơn hàng đã được trả lại. Chúng tôi sẽ xử lý hoàn tiền sớm nhất.</p>',
+            'cancelled': '<p>Đơn hàng đã được hủy thành công.</p>'
+        };
+        return messages[status] || '';
+    }
+
+    formatOrderItems(lineItems) {
+        if (!lineItems || !Array.isArray(lineItems)) return '';
+        
+        const itemsHtml = lineItems.map(item => `
+            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee;">
+                <div>
+                    <strong>${item.product?.name || 'Sản phẩm'}</strong><br>
+                    <small>Số lượng: ${item.quantity}</small>
+                </div>
+                <div style="text-align: right;">
+                    <strong>${(item.total || item.price * item.quantity).toLocaleString('vi-VN')} VND</strong>
+                </div>
+            </div>
+        `).join('');
+
+        return `
+            <div style="background: white; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <h3 style="color: #333; margin-top: 0;">Sản phẩm đã đặt</h3>
+                ${itemsHtml}
+            </div>
+        `;
+    }
 }
 
 module.exports = new EmailService();

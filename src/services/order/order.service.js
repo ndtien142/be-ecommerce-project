@@ -4,13 +4,13 @@ const { BadRequestError, NotFoundError } = require('../../core/error.response');
 const database = require('../../models');
 const { toCamel } = require('../../utils/common.utils');
 const MomoPaymentService = require('../payment/momo.service');
+const EmailService = require('../email/email.service');
 
 class OrderService {
     static async createOrder({
         userId,
         cart,
         addressId,
-        paymentMethodId,
         shippingMethodId,
         note,
         shippingFee = 0,
@@ -27,8 +27,7 @@ class OrderService {
         )
             throw new BadRequestError('cart với lineItems là bắt buộc');
         if (!addressId) throw new BadRequestError('addressId là bắt buộc');
-        if (!paymentMethodId)
-            throw new BadRequestError('paymentMethodId là bắt buộc');
+
         if (!shippingMethodId)
             throw new BadRequestError('shippingMethodId là bắt buộc');
 
@@ -135,7 +134,6 @@ class OrderService {
             const payment = await database.Payment.create(
                 {
                     order_id: order.id,
-                    payment_method_id: paymentMethodId,
                     amount: totalAmount,
                     status: 'pending',
                 },
@@ -161,8 +159,27 @@ class OrderService {
                     { model: database.UserAddress, as: 'address' },
                     { model: database.ShippingMethod, as: 'shippingMethod' },
                     { model: database.Payment, as: 'payment' },
+                    { model: database.User, as: 'user' },
                 ],
             });
+
+            // Send order confirmation email
+            try {
+                if (createdOrder.user && createdOrder.user.email) {
+                    await EmailService.sendOrderConfirmationEmail(
+                        createdOrder.user.email,
+                        createdOrder.user.first_name ||
+                            createdOrder.user.username,
+                        createdOrder,
+                    );
+                }
+            } catch (emailError) {
+                console.error(
+                    'Failed to send order confirmation email:',
+                    emailError,
+                );
+                // Don't throw error - email failure shouldn't break order creation
+            }
 
             return toCamel(createdOrder.toJSON());
         } catch (err) {
@@ -190,9 +207,6 @@ class OrderService {
                 {
                     model: database.Payment,
                     as: 'payment',
-                    include: [
-                        { model: database.PaymentMethod, as: 'paymentMethod' },
-                    ],
                 },
             ],
         });
@@ -215,9 +229,6 @@ class OrderService {
                 {
                     model: database.Payment,
                     as: 'payment',
-                    include: [
-                        { model: database.PaymentMethod, as: 'paymentMethod' },
-                    ],
                 },
             ],
         });
@@ -265,9 +276,6 @@ class OrderService {
                 {
                     model: database.Payment,
                     as: 'payment',
-                    include: [
-                        { model: database.PaymentMethod, as: 'paymentMethod' },
-                    ],
                 },
             ],
         });
@@ -322,9 +330,6 @@ class OrderService {
                 {
                     model: database.Payment,
                     as: 'payment',
-                    include: [
-                        { model: database.PaymentMethod, as: 'paymentMethod' },
-                    ],
                 },
             ],
         });
@@ -348,11 +353,69 @@ class OrderService {
             throw new NotFoundError(
                 'Không tìm thấy đơn hàng hoặc không được cập nhật',
             );
-        return await OrderService.getOrderById(id);
+
+        const updatedOrder = await OrderService.getOrderById(id);
+
+        // Send order status update email
+        try {
+            if (updatedOrder.user && updatedOrder.user.email) {
+                await EmailService.sendOrderStatusUpdateEmail(
+                    updatedOrder.user.email,
+                    updatedOrder.user.firstName || updatedOrder.user.username,
+                    updatedOrder,
+                    status,
+                );
+            }
+        } catch (emailError) {
+            console.error(
+                'Failed to send order status update email:',
+                emailError,
+            );
+            // Don't throw error - email failure shouldn't break status update
+        }
+
+        return updatedOrder;
     }
 
-    static async cancelOrder(id) {
-        return await OrderService.updateOrderStatus(id, 'cancelled');
+    static async cancelOrder(id, reason = '') {
+        const order = await database.Order.findByPk(id, {
+            include: [{ model: database.User, as: 'user' }],
+        });
+
+        if (!order) {
+            throw new NotFoundError('Không tìm thấy đơn hàng');
+        }
+
+        const [affectedRows] = await database.Order.update(
+            { status: 'cancelled' },
+            { where: { id } },
+        );
+
+        if (!affectedRows) {
+            throw new NotFoundError('Không thể hủy đơn hàng');
+        }
+
+        const cancelledOrder = await OrderService.getOrderById(id);
+
+        // Send order cancellation email
+        try {
+            if (order.user && order.user.email) {
+                await EmailService.sendOrderCancellationEmail(
+                    order.user.email,
+                    order.user.first_name || order.user.username,
+                    cancelledOrder,
+                    reason,
+                );
+            }
+        } catch (emailError) {
+            console.error(
+                'Failed to send order cancellation email:',
+                emailError,
+            );
+            // Don't throw error - email failure shouldn't break cancellation
+        }
+
+        return cancelledOrder;
     }
 
     static async updateOrderAddress(orderId, newAddressId) {
@@ -390,6 +453,7 @@ class OrderService {
         }
         return toCamel(result);
     }
+
     static async countOrdersByStatusForAdmin() {
         const statuses = [
             'pending_confirmation',
@@ -408,9 +472,6 @@ class OrderService {
         return toCamel(result);
     }
 
-    /**
-     * Create order with MoMo payment
-     */
     static async createOrderWithMoMo({
         userId,
         cart,
@@ -533,6 +594,38 @@ class OrderService {
             // Only commit transaction after MoMo payment is successfully created
             await transaction.commit();
 
+            // Get full order data for email
+            const fullOrder = await database.Order.findByPk(order.id, {
+                include: [
+                    {
+                        model: database.OrderLineItem,
+                        as: 'lineItems',
+                        include: [{ model: database.Product, as: 'product' }],
+                    },
+                    { model: database.UserAddress, as: 'address' },
+                    { model: database.ShippingMethod, as: 'shippingMethod' },
+                    { model: database.Payment, as: 'payment' },
+                    { model: database.User, as: 'user' },
+                ],
+            });
+
+            // Send order confirmation email
+            try {
+                if (fullOrder.user && fullOrder.user.email) {
+                    await EmailService.sendOrderConfirmationEmail(
+                        fullOrder.user.email,
+                        fullOrder.user.first_name || fullOrder.user.username,
+                        fullOrder,
+                    );
+                }
+            } catch (emailError) {
+                console.error(
+                    'Failed to send order confirmation email:',
+                    emailError,
+                );
+                // Don't throw error - email failure shouldn't break order creation
+            }
+
             return {
                 order: toCamel(order.toJSON()),
                 momoPayment: momoPayment,
@@ -546,9 +639,6 @@ class OrderService {
         }
     }
 
-    /**
-     * Complete order after successful payment
-     */
     static async completeOrderPayment(orderId) {
         const transaction = await database.sequelize.transaction();
         try {
@@ -605,6 +695,59 @@ class OrderService {
             await transaction.rollback();
             throw error;
         }
+    }
+
+    static async sendShippingNotification(
+        orderId,
+        trackingNumber,
+        carrier = '',
+    ) {
+        const order = await database.Order.findByPk(orderId, {
+            include: [
+                { model: database.User, as: 'user' },
+                { model: database.UserAddress, as: 'address' },
+                { model: database.ShippingMethod, as: 'shippingMethod' },
+                {
+                    model: database.OrderLineItem,
+                    as: 'lineItems',
+                    include: [{ model: database.Product, as: 'product' }],
+                },
+            ],
+        });
+
+        if (!order) {
+            throw new NotFoundError('Không tìm thấy đơn hàng');
+        }
+
+        // Update tracking number
+        await database.Order.update(
+            {
+                tracking_number: trackingNumber,
+                shipped_by: carrier,
+                status: 'shipping',
+            },
+            { where: { id: orderId } },
+        );
+
+        // Send shipping notification email
+        try {
+            if (order.user && order.user.email) {
+                await EmailService.sendOrderStatusUpdateEmail(
+                    order.user.email,
+                    order.user.first_name || order.user.username,
+                    { ...order.toJSON(), trackingNumber, shippedBy: carrier },
+                    'shipping',
+                );
+            }
+        } catch (emailError) {
+            console.error(
+                'Failed to send shipping notification email:',
+                emailError,
+            );
+            // Don't throw error - email failure shouldn't break shipping update
+        }
+
+        return await OrderService.getOrderById(orderId);
     }
 }
 
