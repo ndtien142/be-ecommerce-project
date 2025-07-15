@@ -382,12 +382,33 @@ class ProductService {
             });
         }
 
-        const products = await database.Product.findAndCountAll(queryOptions);
-        const totalItems = products.count;
+        // Fix duplicate count issue with many-to-many joins
+        // Use separate queries for count and data to avoid pagination issues
+        
+        // Create count query (without limit/offset)
+        const countOptions = { ...queryOptions };
+        delete countOptions.limit;
+        delete countOptions.offset;
+        delete countOptions.order;
+        countOptions.distinct = true;
+        countOptions.subQuery = false;
+        
+        // Create data query (with limit/offset but no distinct to avoid pagination issues)
+        const dataOptions = { ...queryOptions };
+        dataOptions.distinct = false;
+        dataOptions.subQuery = true;
+        
+        // Execute both queries
+        const [countResult, dataResult] = await Promise.all([
+            database.Product.count(countOptions),
+            database.Product.findAll(dataOptions)
+        ]);
+        
+        const totalItems = countResult;
         const totalPages = Math.ceil(totalItems / limit);
 
         const response = {
-            items: products.rows.map((p) => toCamel(p.toJSON())),
+            items: dataResult.map((p) => toCamel(p.toJSON())),
             meta: {
                 currentPage: page,
                 itemPerPage: limit,

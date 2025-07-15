@@ -2,6 +2,7 @@
 
 const { BadRequestError, NotFoundError } = require('../../core/error.response');
 const database = require('../../models');
+const { toCamel } = require('../../utils/common.utils');
 const EmailService = require('../email/email.service');
 const MomoPaymentService = require('../payment/momo.service');
 const OrderLogService = require('./orderLog.service');
@@ -93,9 +94,15 @@ class OrderWorkflowService {
             });
 
             await transaction.commit();
+
+            // Reload order để có dữ liệu mới nhất sau commit
+            await order.reload();
             return order;
         } catch (error) {
-            await transaction.rollback();
+            // Chỉ rollback nếu transaction chưa được commit/rollback
+            if (!transaction.finished) {
+                await transaction.rollback();
+            }
             throw error;
         }
     }
@@ -154,9 +161,15 @@ class OrderWorkflowService {
             });
 
             await transaction.commit();
+
+            // Reload order để có dữ liệu mới nhất sau commit
+            await order.reload();
             return order;
         } catch (error) {
-            await transaction.rollback();
+            // Chỉ rollback nếu transaction chưa được commit/rollback
+            if (!transaction.finished) {
+                await transaction.rollback();
+            }
             throw error;
         }
     }
@@ -209,9 +222,15 @@ class OrderWorkflowService {
             });
 
             await transaction.commit();
+
+            // Reload order để có dữ liệu mới nhất sau commit
+            await order.reload();
             return order;
         } catch (error) {
-            await transaction.rollback();
+            // Chỉ rollback nếu transaction chưa được commit/rollback
+            if (!transaction.finished) {
+                await transaction.rollback();
+            }
             throw error;
         }
     }
@@ -248,6 +267,8 @@ class OrderWorkflowService {
         order.payment.paid_at = new Date();
         await order.payment.save();
 
+        // Reload order để có dữ liệu mới nhất
+        await order.reload();
         return order;
     }
 
@@ -333,9 +354,15 @@ class OrderWorkflowService {
             }
 
             await transaction.commit();
+
+            // Reload order để có dữ liệu mới nhất sau commit
+            await order.reload();
             return order;
         } catch (error) {
-            await transaction.rollback();
+            // Chỉ rollback nếu transaction chưa được commit/rollback
+            if (!transaction.finished) {
+                await transaction.rollback();
+            }
             throw error;
         }
     }
@@ -423,9 +450,15 @@ class OrderWorkflowService {
             }
 
             await transaction.commit();
+
+            // Reload order để có dữ liệu mới nhất sau commit
+            await order.reload();
             return order;
         } catch (error) {
-            await transaction.rollback();
+            // Chỉ rollback nếu transaction chưa được commit/rollback
+            if (!transaction.finished) {
+                await transaction.rollback();
+            }
             throw error;
         }
     }
@@ -513,9 +546,15 @@ class OrderWorkflowService {
             }
 
             await transaction.commit();
+
+            // Reload order để có dữ liệu mới nhất sau commit
+            await order.reload();
             return order;
         } catch (error) {
-            await transaction.rollback();
+            // Chỉ rollback nếu transaction chưa được commit/rollback
+            if (!transaction.finished) {
+                await transaction.rollback();
+            }
             throw error;
         }
     }

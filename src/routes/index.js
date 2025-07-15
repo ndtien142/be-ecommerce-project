@@ -19,5 +19,6 @@ router.use('/v1/api/momo', require('./momo'));
 router.use('/v1/api/notification', require('./notification'));
 router.use('/v1/api/order', require('./order'));
 router.use('/v1/api/job', require('./job'));
+router.use('/v1/api/dashboard', require('./dashboard'));
 
 module.exports = router;

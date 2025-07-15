@@ -27,6 +27,15 @@ const { authenticationV2 } = require('../../auth/authUtils');
  *             type: string
  *             enum: [confirm, pickup, deliver, customer_confirm, complete_cod_payment, return, cancel]
  *
+ *   parameters:
+ *     UserIdHeader:
+ *       in: header
+ *       name: x-user-id
+ *       required: true
+ *       schema:
+ *         type: string
+ *       description: ID của user thực hiện hành động
+ *
  *   securitySchemes:
  *     bearerAuth:
  *       type: http
@@ -36,7 +45,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
 
 /**
  * @swagger
- * /api/v1/order/workflow/{orderId}:
+ * /order/workflow/{orderId}:
  *   get:
  *     summary: Lấy workflow hiện tại của đơn hàng
  *     tags: [Order Workflow]
@@ -49,6 +58,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
  *         schema:
  *           type: integer
  *         description: ID của đơn hàng
+ *       - $ref: '#/components/parameters/UserIdHeader'
  *     responses:
  *       200:
  *         description: Lấy workflow thành công
@@ -73,7 +83,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
 
 /**
  * @swagger
- * /api/v1/order/workflow/{orderId}/confirm:
+ * /order/workflow/{orderId}/confirm:
  *   post:
  *     summary: Xác nhận đơn hàng
  *     tags: [Order Workflow]
@@ -86,6 +96,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
  *         schema:
  *           type: integer
  *         description: ID của đơn hàng
+ *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
  *       content:
  *         application/json:
@@ -120,7 +131,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
 
 /**
  * @swagger
- * /api/v1/order/workflow/{orderId}/pickup:
+ * /order/workflow/{orderId}/pickup:
  *   post:
  *     summary: Shipper lấy hàng
  *     tags: [Order Workflow]
@@ -133,6 +144,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
  *         schema:
  *           type: integer
  *         description: ID của đơn hàng
+ *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
  *       content:
  *         application/json:
@@ -173,7 +185,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
 
 /**
  * @swagger
- * /api/v1/order/workflow/{orderId}/deliver:
+ * /order/workflow/{orderId}/deliver:
  *   post:
  *     summary: Giao hàng thành công (shipper xác nhận)
  *     tags: [Order Workflow]
@@ -186,6 +198,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
  *         schema:
  *           type: integer
  *         description: ID của đơn hàng
+ *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
  *       content:
  *         application/json:
@@ -220,7 +233,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
 
 /**
  * @swagger
- * /api/v1/order/workflow/{orderId}/customer-confirm:
+ * /order/workflow/{orderId}/customer-confirm:
  *   post:
  *     summary: Khách hàng xác nhận đã nhận hàng
  *     tags: [Order Workflow]
@@ -233,6 +246,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
  *         schema:
  *           type: integer
  *         description: ID của đơn hàng
+ *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
  *       content:
  *         application/json:
@@ -267,7 +281,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
 
 /**
  * @swagger
- * /api/v1/order/workflow/{orderId}/complete-cod:
+ * /order/workflow/{orderId}/complete-cod:
  *   post:
  *     summary: Shipper nộp tiền COD
  *     tags: [Order Workflow]
@@ -280,6 +294,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
  *         schema:
  *           type: integer
  *         description: ID của đơn hàng
+ *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
  *       content:
  *         application/json:
@@ -314,7 +329,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
 
 /**
  * @swagger
- * /api/v1/order/workflow/{orderId}/return:
+ * /order/workflow/{orderId}/return:
  *   post:
  *     summary: Trả hàng / Không nhận hàng
  *     tags: [Order Workflow]
@@ -327,6 +342,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
  *         schema:
  *           type: integer
  *         description: ID của đơn hàng
+ *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
  *       content:
  *         application/json:
@@ -362,7 +378,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
 
 /**
  * @swagger
- * /api/v1/order/workflow/{orderId}/cancel:
+ * /order/workflow/{orderId}/cancel:
  *   post:
  *     summary: Hủy đơn hàng
  *     tags: [Order Workflow]
@@ -375,6 +391,7 @@ const { authenticationV2 } = require('../../auth/authUtils');
  *         schema:
  *           type: integer
  *         description: ID của đơn hàng
+ *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
  *       content:
  *         application/json:
@@ -409,12 +426,14 @@ const { authenticationV2 } = require('../../auth/authUtils');
 
 /**
  * @swagger
- * /api/v1/order/workflow/statistics:
+ * /order/workflow/statistics:
  *   get:
  *     summary: Thống kê đơn hàng
  *     tags: [Order Workflow]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/UserIdHeader'
  *     responses:
  *       200:
  *         description: Lấy thống kê thành công
