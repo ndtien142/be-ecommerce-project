@@ -253,10 +253,16 @@ class OrderService {
         if (startDate || endDate) {
             where.ordered_date = {};
             if (startDate) {
-                where.ordered_date['$gte'] = new Date(startDate);
+                // Set to start of day (00:00:00)
+                const startOfDay = new Date(startDate);
+                startOfDay.setHours(0, 0, 0, 0);
+                where.ordered_date[database.Sequelize.Op.gte] = startOfDay;
             }
             if (endDate) {
-                where.ordered_date['$lte'] = new Date(endDate);
+                // Set to end of day (23:59:59.999)
+                const endOfDay = new Date(endDate);
+                endOfDay.setHours(23, 59, 59, 999);
+                where.ordered_date[database.Sequelize.Op.lte] = endOfDay;
             }
         }
         const orders = await database.Order.findAndCountAll({
@@ -307,10 +313,16 @@ class OrderService {
         if (startDate || endDate) {
             where.ordered_date = {};
             if (startDate) {
-                where.ordered_date['$gte'] = new Date(startDate);
+                // Set to start of day (00:00:00)
+                const startOfDay = new Date(startDate);
+                startOfDay.setHours(0, 0, 0, 0);
+                where.ordered_date[database.Sequelize.Op.gte] = startOfDay;
             }
             if (endDate) {
-                where.ordered_date['$lte'] = new Date(endDate);
+                // Set to end of day (23:59:59.999)
+                const endOfDay = new Date(endDate);
+                endOfDay.setHours(23, 59, 59, 999);
+                where.ordered_date[database.Sequelize.Op.lte] = endOfDay;
             }
         }
         const orders = await database.Order.findAndCountAll({
