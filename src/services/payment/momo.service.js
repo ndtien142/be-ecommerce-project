@@ -8,6 +8,7 @@ const {
     InternalServerError,
 } = require('../../core/error.response');
 const database = require('../../models');
+const EmailService = require('../email/email.service');
 const {
     MOMO_RESULT_CODES,
     MOMO_PAYMENT_STATUS,
@@ -191,6 +192,19 @@ class MomoPaymentService {
             // Update payment record
             const payment = await database.Payment.findOne({
                 where: { transaction_id: requestId },
+                include: [
+                    {
+                        model: database.Order,
+                        as: 'order',
+                        include: [
+                            {
+                                model: database.User,
+                                as: 'user',
+                                attributes: ['id', 'user_login', 'user_email', 'user_nickname'],
+                            },
+                        ],
+                    },
+                ],
             });
 
             if (!payment) {
@@ -245,6 +259,29 @@ class MomoPaymentService {
                     result_code: resultCode,
                 }),
             });
+
+            // Gửi email thông báo cho người dùng về trạng thái thanh toán
+            if (payment.order && payment.order.user && payment.order.user.user_email) {
+                try {
+                    await this.sendPaymentNotificationEmail(
+                        payment.order.user.user_email,
+                        payment.order.user.user_nickname || payment.order.user.user_login,
+                        payment.order,
+                        paymentStatus,
+                        {
+                            amount,
+                            transId,
+                            payType,
+                            message,
+                            resultCode,
+                        }
+                    );
+                    console.log(`Payment notification email sent to ${payment.order.user.user_email} for order ${payment.order.id}`);
+                } catch (emailError) {
+                    console.error('Failed to send payment notification email:', emailError);
+                    // Không throw error để không ảnh hưởng đến flow IPN
+                }
+            }
 
             // Note: Order status should be updated by order management system
             // based on business logic, not directly tied to payment status
@@ -600,6 +637,183 @@ class MomoPaymentService {
             };
         } catch (error) {
             console.error('Get payment status error:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Send payment notification email to user
+     * @param {string} email - User email
+     * @param {string} username - User name
+     * @param {Object} order - Order object
+     * @param {string} paymentStatus - Payment status
+     * @param {Object} paymentInfo - Payment information
+     */
+    static async sendPaymentNotificationEmail(email, username, order, paymentStatus, paymentInfo) {
+        try {
+            const { amount, transId, payType, message, resultCode } = paymentInfo;
+
+            let subject = '';
+            let emailContent = '';
+
+            switch (paymentStatus) {
+                case MOMO_PAYMENT_STATUS.COMPLETED:
+                    subject = `Thanh toán thành công - Đơn hàng #${order.id}`;
+                    emailContent = `
+                        <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+                            <h2 style="color: #4caf50; text-align: center;">Thanh toán thành công!</h2>
+                            <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                                <p>Xin chào <strong>${username}</strong>,</p>
+                                <p>Thanh toán cho đơn hàng #${order.id} đã được xử lý thành công qua MoMo.</p>
+                                
+                                <div style="background: #e8f5e8; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #4caf50;">
+                                    <h3 style="color: #388e3c; margin-top: 0;">Chi tiết thanh toán</h3>
+                                    <p><strong>Mã đơn hàng:</strong> #${order.id}</p>
+                                    <p><strong>Số tiền:</strong> ${amount.toLocaleString('vi-VN')} VND</p>
+                                    <p><strong>Mã giao dịch:</strong> ${transId}</p>
+                                    <p><strong>Phương thức:</strong> ${payType}</p>
+                                    <p><strong>Thời gian:</strong> ${new Date().toLocaleString('vi-VN')}</p>
+                                </div>
+
+                                <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                                    <h4 style="color: #856404; margin-top: 0;">Bước tiếp theo</h4>
+                                    <p>Đơn hàng của bạn đang được xử lý. Chúng tôi sẽ thông báo khi đơn hàng được xác nhận và bắt đầu giao hàng.</p>
+                                </div>
+
+                                <div style="text-align: center; margin: 20px 0;">
+                                    <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/orders/${order.id}" 
+                                       style="background: #4caf50; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                                        Xem chi tiết đơn hàng
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    break;
+
+                case MOMO_PAYMENT_STATUS.CANCELLED:
+                    subject = `Thanh toán đã bị hủy - Đơn hàng #${order.id}`;
+                    emailContent = `
+                        <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+                            <h2 style="color: #f44336; text-align: center;">Thanh toán đã bị hủy</h2>
+                            <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                                <p>Xin chào <strong>${username}</strong>,</p>
+                                <p>Thanh toán cho đơn hàng #${order.id} đã bị hủy.</p>
+                                
+                                <div style="background: #ffebee; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #f44336;">
+                                    <h3 style="color: #d32f2f; margin-top: 0;">Chi tiết</h3>
+                                    <p><strong>Mã đơn hàng:</strong> #${order.id}</p>
+                                    <p><strong>Số tiền:</strong> ${amount.toLocaleString('vi-VN')} VND</p>
+                                    <p><strong>Lý do:</strong> ${message}</p>
+                                    <p><strong>Thời gian:</strong> ${new Date().toLocaleString('vi-VN')}</p>
+                                </div>
+
+                                <div style="background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #2196f3;">
+                                    <h4 style="color: #1976d2; margin-top: 0;">Bạn có thể</h4>
+                                    <p>• Thử thanh toán lại bằng cách truy cập đơn hàng</p>
+                                    <p>• Chọn phương thức thanh toán khác (COD)</p>
+                                    <p>• Hủy đơn hàng nếu không muốn tiếp tục</p>
+                                </div>
+
+                                <div style="text-align: center; margin: 20px 0;">
+                                    <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/orders/${order.id}" 
+                                       style="background: #2196f3; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                                        Xem đơn hàng
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    break;
+
+                case MOMO_PAYMENT_STATUS.FAILED:
+                    subject = `Thanh toán thất bại - Đơn hàng #${order.id}`;
+                    emailContent = `
+                        <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+                            <h2 style="color: #f44336; text-align: center;">Thanh toán thất bại</h2>
+                            <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                                <p>Xin chào <strong>${username}</strong>,</p>
+                                <p>Thanh toán cho đơn hàng #${order.id} đã thất bại.</p>
+                                
+                                <div style="background: #ffebee; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #f44336;">
+                                    <h3 style="color: #d32f2f; margin-top: 0;">Chi tiết lỗi</h3>
+                                    <p><strong>Mã đơn hàng:</strong> #${order.id}</p>
+                                    <p><strong>Số tiền:</strong> ${amount.toLocaleString('vi-VN')} VND</p>
+                                    <p><strong>Lý do:</strong> ${message}</p>
+                                    <p><strong>Mã lỗi:</strong> ${resultCode}</p>
+                                    <p><strong>Thời gian:</strong> ${new Date().toLocaleString('vi-VN')}</p>
+                                </div>
+
+                                <div style="background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #2196f3;">
+                                    <h4 style="color: #1976d2; margin-top: 0;">Khuyến nghị</h4>
+                                    <p>• Kiểm tra lại thông tin thẻ/tài khoản</p>
+                                    <p>• Đảm bảo tài khoản có đủ số dư</p>
+                                    <p>• Thử thanh toán lại sau vài phút</p>
+                                    <p>• Liên hệ với chúng tôi nếu vấn đề vẫn tiếp tục</p>
+                                </div>
+
+                                <div style="text-align: center; margin: 20px 0;">
+                                    <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/orders/${order.id}" 
+                                       style="background: #f44336; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                                        Thử thanh toán lại
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    break;
+
+                case MOMO_PAYMENT_STATUS.EXPIRED:
+                    subject = `Thanh toán đã hết hạn - Đơn hàng #${order.id}`;
+                    emailContent = `
+                        <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+                            <h2 style="color: #ff9800; text-align: center;">Thanh toán đã hết hạn</h2>
+                            <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                                <p>Xin chào <strong>${username}</strong>,</p>
+                                <p>Thanh toán cho đơn hàng #${order.id} đã hết hạn.</p>
+                                
+                                <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                                    <h3 style="color: #856404; margin-top: 0;">Chi tiết</h3>
+                                    <p><strong>Mã đơn hàng:</strong> #${order.id}</p>
+                                    <p><strong>Số tiền:</strong> ${amount.toLocaleString('vi-VN')} VND</p>
+                                    <p><strong>Thời gian hết hạn:</strong> ${new Date().toLocaleString('vi-VN')}</p>
+                                </div>
+
+                                <div style="background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #2196f3;">
+                                    <h4 style="color: #1976d2; margin-top: 0;">Bạn có thể</h4>
+                                    <p>• Tạo link thanh toán mới</p>
+                                    <p>• Chọn phương thức thanh toán khác (COD)</p>
+                                    <p>• Hủy đơn hàng nếu không muốn tiếp tục</p>
+                                </div>
+
+                                <div style="text-align: center; margin: 20px 0;">
+                                    <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/orders/${order.id}" 
+                                       style="background: #ff9800; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                                        Thanh toán lại
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    break;
+
+                default:
+                    // Không gửi email cho trạng thái khác
+                    return;
+            }
+
+            // Gửi email
+            const mailOptions = {
+                from: process.env.EMAIL_FROM || 'noreply@yourapp.com',
+                to: email,
+                subject: subject,
+                html: emailContent,
+            };
+
+            await EmailService.transporter.sendMail(mailOptions);
+            
+        } catch (error) {
+            console.error('Send payment notification email error:', error);
             throw error;
         }
     }
