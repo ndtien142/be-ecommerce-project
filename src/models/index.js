@@ -248,6 +248,16 @@ database.Payment.hasMany(database.Order, {
     as: 'orders',
 });
 
+// Payment & Order (reverse association for order_id in payment)
+database.Payment.belongsTo(database.Order, {
+    foreignKey: 'order_id',
+    as: 'order',
+});
+database.Order.hasMany(database.Payment, {
+    foreignKey: 'order_id',
+    as: 'payments',
+});
+
 // PaymentMethod & CustomerPaymentOption
 database.PaymentMethod.hasMany(database.CustomerPaymentOption, {
     foreignKey: 'payment_method_id',
@@ -471,7 +481,7 @@ database.UserAddress.hasMany(database.Order, {
 
 // Sync the models with the database
 sequelize
-    .sync()
+    .sync({ alter: true })
     .then(() => {
         console.log('Database & tables created!');
     })

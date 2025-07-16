@@ -7,6 +7,59 @@ const MomoPaymentService = require('../payment/momo.service');
 const EmailService = require('../email/email.service');
 
 class OrderService {
+    // Helper method to validate stock availability
+    static async validateStockAvailability(cartItems) {
+        for (const item of cartItems) {
+            const product = await database.Product.findByPk(item.product_id);
+            if (!product) {
+                throw new NotFoundError(
+                    `Không tìm thấy sản phẩm có ID: ${item.product_id}`,
+                );
+            }
+
+            const availableStock = Number(product.stock);
+            const requestedQuantity = Number(item.quantity);
+
+            if (availableStock < requestedQuantity) {
+                throw new BadRequestError(
+                    `Sản phẩm "${product.name}" chỉ còn ${availableStock} sản phẩm trong kho, không đủ cho số lượng yêu cầu ${requestedQuantity}`,
+                );
+            }
+
+            if (product.status !== 'active') {
+                throw new BadRequestError(
+                    `Sản phẩm "${product.name}" không còn khả dụng`,
+                );
+            }
+        }
+    }
+
+    // Helper method to update product stock and sold count
+    static async updateProductStock(cartItems, transaction) {
+        for (const item of cartItems) {
+            const product = await database.Product.findByPk(item.product_id, {
+                transaction,
+            });
+
+            if (product) {
+                product.stock = Number(product.stock) - Number(item.quantity);
+                product.sold =
+                    Number(product.sold || 0) + Number(item.quantity);
+
+                if (product.stock <= 0) {
+                    product.inventory_type = 'out_of_stock';
+                    product.stock = 0;
+                } else if (product.stock <= (product.min_stock || 0)) {
+                    product.inventory_type = 'low_stock';
+                } else {
+                    product.inventory_type = 'in_stock';
+                }
+
+                await product.save({ transaction });
+            }
+        }
+    }
+
     static async createOrder({
         userId,
         cart,
@@ -73,6 +126,9 @@ class OrderService {
                 0,
             ) + Number(shippingFee);
 
+        // Validate stock availability before creating order
+        await OrderService.validateStockAvailability(beCart.lineItems);
+
         // Start transaction
         const transaction = await database.sequelize.transaction();
         try {
@@ -94,7 +150,7 @@ class OrderService {
                 { transaction },
             );
 
-            // Create order line items and update product stock/sold
+            // Create order line items
             for (const item of beCart.lineItems) {
                 await database.OrderLineItem.create(
                     {
@@ -106,29 +162,13 @@ class OrderService {
                     },
                     { transaction },
                 );
-
-                // Update product stock and sold
-                const product = await database.Product.findByPk(
-                    item.product_id,
-                    { transaction },
-                );
-                if (product) {
-                    product.stock =
-                        Number(product.stock) - Number(item.quantity);
-                    product.sold =
-                        Number(product.sold || 0) + Number(item.quantity);
-
-                    if (product.stock <= 0) {
-                        product.inventory_type = 'out_of_stock';
-                        product.stock = 0;
-                    } else if (product.stock <= (product.min_stock || 0)) {
-                        product.inventory_type = 'low_stock';
-                    } else {
-                        product.inventory_type = 'in_stock';
-                    }
-                    await product.save({ transaction });
-                }
             }
+
+            // Update product stock and sold count
+            await OrderService.updateProductStock(
+                beCart.lineItems,
+                transaction,
+            );
 
             // Create payment record and update order.payment_id
             const payment = await database.Payment.create(
@@ -165,11 +205,11 @@ class OrderService {
 
             // Send order confirmation email
             try {
-                if (createdOrder.user && createdOrder.user.email) {
+                if (createdOrder.user && createdOrder.user.user_email) {
                     await EmailService.sendOrderConfirmationEmail(
-                        createdOrder.user.email,
+                        createdOrder.user.user_email,
                         createdOrder.user.first_name ||
-                            createdOrder.user.username,
+                            createdOrder.user.user_login,
                         createdOrder,
                     );
                 }
@@ -356,12 +396,6 @@ class OrderService {
         };
     }
 
-    // DEPRECATED: Sử dụng OrderWorkflowService.confirmOrder() thay thế
-    // static async updateOrderStatus(id, status) { ... }
-
-    // DEPRECATED: Sử dụng OrderWorkflowService.cancelOrder() thay thế
-    // static async cancelOrder(id, reason = '') { ... }
-
     static async updateOrderAddress(orderId, newAddressId) {
         const order = await database.Order.findByPk(orderId);
         if (!order) throw new NotFoundError('Không tìm thấy đơn hàng');
@@ -480,9 +514,18 @@ class OrderService {
                 0,
             ) + Number(shippingFee);
 
+        // Validate stock availability before creating order
+        await OrderService.validateStockAvailability(beCart.lineItems);
+
         // Start transaction
         const transaction = await database.sequelize.transaction();
         try {
+            // Update product stock and sold count immediately (same as COD)
+            await OrderService.updateProductStock(
+                beCart.lineItems,
+                transaction,
+            );
+
             beCart.status = 'ordered';
             await beCart.save({ transaction });
             // Create order
@@ -581,117 +624,6 @@ class OrderService {
             }
             throw error;
         }
-    }
-
-    static async completeOrderPayment(orderId) {
-        const transaction = await database.sequelize.transaction();
-        try {
-            // Get order with line items
-            const order = await database.Order.findOne({
-                where: { id: orderId },
-                include: [{ model: database.OrderLineItem, as: 'lineItems' }],
-                transaction,
-            });
-
-            if (!order) throw new NotFoundError('Order not found');
-
-            // Update product stock and sold
-            for (const item of order.lineItems) {
-                const product = await database.Product.findByPk(
-                    item.product_id,
-                    { transaction },
-                );
-                if (product) {
-                    product.stock =
-                        Number(product.stock) - Number(item.quantity);
-                    product.sold =
-                        Number(product.sold || 0) + Number(item.quantity);
-
-                    if (product.stock <= 0) {
-                        product.inventory_type = 'out_of_stock';
-                        product.stock = 0;
-                    } else if (product.stock <= (product.min_stock || 0)) {
-                        product.inventory_type = 'low_stock';
-                    } else {
-                        product.inventory_type = 'in_stock';
-                    }
-                    await product.save({ transaction });
-                }
-            }
-
-            // Update order status
-            order.status = 'pending_confirmation';
-            await order.save({ transaction });
-
-            // Set cart status to 'ordered'
-            const cart = await database.Cart.findOne({
-                where: { user_id: order.user_id, status: 'active' },
-                transaction,
-            });
-            if (cart) {
-                cart.status = 'ordered';
-                await cart.save({ transaction });
-            }
-
-            await transaction.commit();
-            return toCamel(order.toJSON());
-        } catch (error) {
-            await transaction.rollback();
-            throw error;
-        }
-    }
-
-    static async sendShippingNotification(
-        orderId,
-        trackingNumber,
-        carrier = '',
-    ) {
-        const order = await database.Order.findByPk(orderId, {
-            include: [
-                { model: database.User, as: 'user' },
-                { model: database.UserAddress, as: 'address' },
-                { model: database.ShippingMethod, as: 'shippingMethod' },
-                {
-                    model: database.OrderLineItem,
-                    as: 'lineItems',
-                    include: [{ model: database.Product, as: 'product' }],
-                },
-            ],
-        });
-
-        if (!order) {
-            throw new NotFoundError('Không tìm thấy đơn hàng');
-        }
-
-        // Update tracking number
-        await database.Order.update(
-            {
-                tracking_number: trackingNumber,
-                shipped_by: carrier,
-                status: 'shipping',
-            },
-            { where: { id: orderId } },
-        );
-
-        // Send shipping notification email
-        try {
-            if (order.user && order.user.email) {
-                await EmailService.sendOrderStatusUpdateEmail(
-                    order.user.email,
-                    order.user.first_name || order.user.username,
-                    { ...order.toJSON(), trackingNumber, shippedBy: carrier },
-                    'shipping',
-                );
-            }
-        } catch (emailError) {
-            console.error(
-                'Failed to send shipping notification email:',
-                emailError,
-            );
-            // Don't throw error - email failure shouldn't break shipping update
-        }
-
-        return await OrderService.getOrderById(orderId);
     }
 }
 
