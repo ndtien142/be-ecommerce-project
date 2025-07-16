@@ -187,10 +187,14 @@ class EmailService {
 
                         <div style="background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0;">
                             <h4 style="color: #1976d2; margin-top: 0;">Thông tin giao hàng</h4>
-                            ${order.address ? `
+                            ${
+                                order.address
+                                    ? `
                                 <p><strong>Địa chỉ:</strong> ${order.address.fullAddress || order.address.full_address}</p>
                                 <p><strong>Số điện thoại:</strong> ${order.address.phoneNumber || order.address.phone_number}</p>
-                            ` : ''}
+                            `
+                                    : ''
+                            }
                             <p><strong>Phương thức vận chuyển:</strong> ${order.shippingMethod?.name || 'Chưa xác định'}</p>
                             <p><strong>Phí vận chuyển:</strong> ${(order.shippingFee || order.shipping_fee || 0).toLocaleString('vi-VN')} VND</p>
                         </div>
@@ -328,44 +332,51 @@ class EmailService {
     // Helper methods for order emails
     getOrderStatusText(status) {
         const statusMap = {
-            'pending_confirmation': 'Chờ xác nhận',
-            'pending_pickup': 'Chờ lấy hàng',
-            'shipping': 'Đang giao hàng',
-            'delivered': 'Đã giao hàng',
-            'returned': 'Đã trả hàng',
-            'cancelled': 'Đã hủy'
+            pending_confirmation: 'Chờ xác nhận',
+            pending_pickup: 'Chờ lấy hàng',
+            shipping: 'Đang giao hàng',
+            delivered: 'Đã giao hàng',
+            returned: 'Đã trả hàng',
+            cancelled: 'Đã hủy',
         };
         return statusMap[status] || status;
     }
 
     getOrderStatusColor(status) {
         const colorMap = {
-            'pending_confirmation': '#ff9800',
-            'pending_pickup': '#2196f3',
-            'shipping': '#9c27b0',
-            'delivered': '#4caf50',
-            'returned': '#f44336',
-            'cancelled': '#9e9e9e'
+            pending_confirmation: '#ff9800',
+            pending_pickup: '#2196f3',
+            shipping: '#9c27b0',
+            delivered: '#4caf50',
+            returned: '#f44336',
+            cancelled: '#9e9e9e',
         };
         return colorMap[status] || '#666';
     }
 
     getStatusSpecificMessage(status) {
         const messages = {
-            'pending_confirmation': '<p>Đơn hàng của bạn đang chờ xác nhận từ cửa hàng.</p>',
-            'pending_pickup': '<p>Đơn hàng đã được xác nhận và đang chờ lấy hàng.</p>',
-            'shipping': '<p>Đơn hàng đang trên đường giao đến bạn. Vui lòng chú ý điện thoại!</p>',
-            'delivered': '<p>Đơn hàng đã được giao thành công. Cảm ơn bạn đã mua hàng!</p>',
-            'returned': '<p>Đơn hàng đã được trả lại. Chúng tôi sẽ xử lý hoàn tiền sớm nhất.</p>',
-            'cancelled': '<p>Đơn hàng đã được hủy thành công.</p>'
+            pending_confirmation:
+                '<p>Đơn hàng của bạn đang chờ xác nhận từ cửa hàng.</p>',
+            pending_pickup:
+                '<p>Đơn hàng đã được xác nhận và đang chờ lấy hàng.</p>',
+            shipping:
+                '<p>Đơn hàng đang trên đường giao đến bạn. Vui lòng chú ý điện thoại!</p>',
+            delivered:
+                '<p>Đơn hàng đã được giao thành công. Cảm ơn bạn đã mua hàng!</p>',
+            returned:
+                '<p>Đơn hàng đã được trả lại. Chúng tôi sẽ xử lý hoàn tiền sớm nhất.</p>',
+            cancelled: '<p>Đơn hàng đã được hủy thành công.</p>',
         };
         return messages[status] || '';
     }
 
     formatOrderItems(lineItems) {
         if (!lineItems || !Array.isArray(lineItems)) return '';
-        
-        const itemsHtml = lineItems.map(item => `
+
+        const itemsHtml = lineItems
+            .map(
+                (item) => `
             <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee;">
                 <div>
                     <strong>${item.product?.name || 'Sản phẩm'}</strong><br>
@@ -375,7 +386,9 @@ class EmailService {
                     <strong>${(item.total || item.price * item.quantity).toLocaleString('vi-VN')} VND</strong>
                 </div>
             </div>
-        `).join('');
+        `,
+            )
+            .join('');
 
         return `
             <div style="background: white; padding: 15px; border-radius: 5px; margin: 20px 0;">

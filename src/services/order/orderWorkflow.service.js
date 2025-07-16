@@ -121,7 +121,20 @@ class OrderWorkflowService {
         ipAddress = null,
         userAgent = null,
     ) {
-        const order = await database.Order.findByPk(orderId);
+        const order = await database.Order.findByPk(orderId, {
+            include: [
+                {
+                    model: database.User,
+                    as: 'user',
+                    attributes: [
+                        'id',
+                        'user_login',
+                        'user_email',
+                        'user_nickname',
+                    ],
+                },
+            ],
+        });
 
         if (!order) {
             throw new NotFoundError('Đơn hàng không tồn tại');
@@ -164,6 +177,25 @@ class OrderWorkflowService {
 
             // Reload order để có dữ liệu mới nhất sau commit
             await order.reload();
+
+            // Gửi email thông báo vận chuyển
+            if (order.user && order.user.user_email) {
+                try {
+                    await EmailService.sendOrderStatusUpdateEmail(
+                        order.user.user_email,
+                        order.user.user_nickname || order.user.user_login,
+                        order,
+                        'shipping',
+                    );
+                    console.log(
+                        `Shipping email sent to ${order.user.user_email} for order ${order.id}`,
+                    );
+                } catch (emailError) {
+                    console.error('Failed to send shipping email:', emailError);
+                    // Không throw error để không ảnh hưởng đến flow chính
+                }
+            }
+
             return order;
         } catch (error) {
             // Chỉ rollback nếu transaction chưa được commit/rollback
@@ -187,7 +219,22 @@ class OrderWorkflowService {
         userAgent = null,
     ) {
         const order = await database.Order.findByPk(orderId, {
-            include: [{ model: database.Payment, as: 'payment' }],
+            include: [
+                {
+                    model: database.Payment,
+                    as: 'payment',
+                },
+                {
+                    model: database.User,
+                    as: 'user',
+                    attributes: [
+                        'id',
+                        'user_login',
+                        'user_email',
+                        'user_nickname',
+                    ],
+                },
+            ],
         });
 
         if (!order) {
@@ -225,6 +272,25 @@ class OrderWorkflowService {
 
             // Reload order để có dữ liệu mới nhất sau commit
             await order.reload();
+
+            // Gửi email thông báo giao hàng thành công
+            if (order.user && order.user.user_email) {
+                try {
+                    await EmailService.sendOrderStatusUpdateEmail(
+                        order.user.user_email,
+                        order.user.user_nickname || order.user.user_login,
+                        order,
+                        'delivered',
+                    );
+                    console.log(
+                        `Delivery email sent to ${order.user.user_email} for order ${order.id}`,
+                    );
+                } catch (emailError) {
+                    console.error('Failed to send delivery email:', emailError);
+                    // Không throw error để không ảnh hưởng đến flow chính
+                }
+            }
+
             return order;
         } catch (error) {
             // Chỉ rollback nếu transaction chưa được commit/rollback
@@ -373,7 +439,22 @@ class OrderWorkflowService {
      */
     static async cancelOrder(orderId, reason = null) {
         const order = await database.Order.findByPk(orderId, {
-            include: [{ model: database.Payment, as: 'payment' }],
+            include: [
+                {
+                    model: database.Payment,
+                    as: 'payment',
+                },
+                {
+                    model: database.User,
+                    as: 'user',
+                    attributes: [
+                        'id',
+                        'user_login',
+                        'user_email',
+                        'user_nickname',
+                    ],
+                },
+            ],
         });
 
         if (!order) {
@@ -453,6 +534,28 @@ class OrderWorkflowService {
 
             // Reload order để có dữ liệu mới nhất sau commit
             await order.reload();
+
+            // Gửi email thông báo hủy đơn hàng
+            if (order.user && order.user.user_email) {
+                try {
+                    await EmailService.sendOrderCancellationEmail(
+                        order.user.user_email,
+                        order.user.user_nickname || order.user.user_login,
+                        order,
+                        reason,
+                    );
+                    console.log(
+                        `Cancellation email sent to ${order.user.user_email} for order ${order.id}`,
+                    );
+                } catch (emailError) {
+                    console.error(
+                        'Failed to send cancellation email:',
+                        emailError,
+                    );
+                    // Không throw error để không ảnh hưởng đến flow chính
+                }
+            }
+
             return order;
         } catch (error) {
             // Chỉ rollback nếu transaction chưa được commit/rollback

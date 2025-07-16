@@ -162,58 +162,6 @@ const router = express.Router();
 
 /**
  * @swagger
- * /order/{id}/status:
- *   patch:
- *     summary: Update order status
- *     tags: [Order]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: Order ID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - status
- *             properties:
- *               status:
- *                 type: string
- *                 enum: [pending_confirmation, pending_pickup, shipping, delivered, returned, cancelled]
- *     responses:
- *       200:
- *         description: Order status updated successfully
- *       404:
- *         description: Order not found
- */
-
-/**
- * @swagger
- * /order/{id}/cancel:
- *   patch:
- *     summary: Cancel order
- *     tags: [Order]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: Order ID
- *     responses:
- *       200:
- *         description: Order cancelled successfully
- *       404:
- *         description: Order not found
- */
-
-/**
- * @swagger
  * /order/{id}/address:
  *   patch:
  *     summary: Update order address (if not shipping)

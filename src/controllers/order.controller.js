@@ -33,7 +33,7 @@ class OrderController {
 
     // DEPRECATED: Sử dụng OrderWorkflowController.confirmOrder() thay thế
     // updateOrderStatus = async (req, res, next) => { ... }
-    
+
     // DEPRECATED: Sử dụng OrderWorkflowController.cancelOrder() thay thế
     // cancelOrder = async (req, res, next) => { ... }
 
