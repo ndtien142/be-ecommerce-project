@@ -481,7 +481,7 @@ database.UserAddress.hasMany(database.Order, {
 
 // Sync the models with the database
 sequelize
-    .sync()
+    .sync({ alter: true })
     .then(() => {
         console.log('Database & tables created!');
     })

@@ -55,6 +55,7 @@ module.exports = (sequelize) => {
                     'cancelled', // Hủy đơn
                     'cod_completed', // Hoàn tất COD
                     'payment_completed', // Thanh toán hoàn tất
+                    'payment_updated', // Cập nhật trạng thái thanh toán
                     'refunded', // Hoàn tiền
                 ),
                 allowNull: false,

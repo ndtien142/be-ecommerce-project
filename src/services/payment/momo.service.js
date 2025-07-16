@@ -200,7 +200,12 @@ class MomoPaymentService {
                             {
                                 model: database.User,
                                 as: 'user',
-                                attributes: ['id', 'user_login', 'user_email', 'user_nickname'],
+                                attributes: [
+                                    'id',
+                                    'user_login',
+                                    'user_email',
+                                    'user_nickname',
+                                ],
                             },
                         ],
                     },
@@ -261,11 +266,16 @@ class MomoPaymentService {
             });
 
             // Gửi email thông báo cho người dùng về trạng thái thanh toán
-            if (payment.order && payment.order.user && payment.order.user.user_email) {
+            if (
+                payment.order &&
+                payment.order.user &&
+                payment.order.user.user_email
+            ) {
                 try {
                     await this.sendPaymentNotificationEmail(
                         payment.order.user.user_email,
-                        payment.order.user.user_nickname || payment.order.user.user_login,
+                        payment.order.user.user_nickname ||
+                            payment.order.user.user_login,
                         payment.order,
                         paymentStatus,
                         {
@@ -274,11 +284,16 @@ class MomoPaymentService {
                             payType,
                             message,
                             resultCode,
-                        }
+                        },
                     );
-                    console.log(`Payment notification email sent to ${payment.order.user.user_email} for order ${payment.order.id}`);
+                    console.log(
+                        `Payment notification email sent to ${payment.order.user.user_email} for order ${payment.order.id}`,
+                    );
                 } catch (emailError) {
-                    console.error('Failed to send payment notification email:', emailError);
+                    console.error(
+                        'Failed to send payment notification email:',
+                        emailError,
+                    );
                     // Không throw error để không ảnh hưởng đến flow IPN
                 }
             }
@@ -362,9 +377,25 @@ class MomoPaymentService {
                 MOMO_ENDPOINTS.QUERY_TRANSACTION,
             );
 
+            console.log('✅ MoMo transaction status check response:', response);
+            console.log('--------------------------------------------------');
+            console.log('orderId:', orderId);
+            console.log('resultCode:', response.resultCode);
+            console.log('transId:', response.transId);
+            console.log('amount:', response.amount);
+            console.log('payType:', response.payType);
+            console.log('Current payment status:', payment.status);
+            console.log('--------------------------------------------------');
+
             // Update payment and order status based on response
             if (response.resultCode === MOMO_RESULT_CODES.SUCCESS) {
                 if (payment && payment.status === MOMO_PAYMENT_STATUS.PENDING) {
+                    console.log(
+                        '🔄 Updating payment status from PENDING to COMPLETED',
+                    );
+                    console.log('Payment ID:', payment.id);
+                    console.log('Order ID:', payment.order_id);
+
                     // Update payment status only
                     await database.Payment.update(
                         {
@@ -378,9 +409,53 @@ class MomoPaymentService {
                         },
                     );
 
+                    // Create order log only when payment status changes
+                    await database.OrderLog.create({
+                        order_id: payment.order_id,
+                        from_status: 'pending_confirmation',
+                        to_status: 'pending_confirmation', // Payment update doesn't change order status
+                        action: 'payment_updated',
+                        actor_type: 'payment_gateway',
+                        actor_id: null,
+                        actor_name: 'MoMo',
+                        note: `Payment status changed from PENDING to COMPLETED (resultCode: ${response.resultCode})`,
+                        metadata: JSON.stringify({
+                            amount: response.amount,
+                            transId: response.transId,
+                            payType: response.payType,
+                            message: response.message,
+                            old_payment_status: MOMO_PAYMENT_STATUS.PENDING,
+                            new_payment_status: MOMO_PAYMENT_STATUS.COMPLETED,
+                            result_code: response.resultCode,
+                            check_transaction: true,
+                            response_time: response.responseTime,
+                        }),
+                    });
+
+                    console.log(
+                        '✅ Payment status updated successfully and order log created',
+                    );
+                    console.log(
+                        'New payment status:',
+                        MOMO_PAYMENT_STATUS.COMPLETED,
+                    );
+
                     // Note: Order status should be updated by order management system
                     // based on business logic, not directly tied to payment status
+                } else {
+                    console.log(
+                        'ℹ️  Payment already completed or not in pending status',
+                    );
+                    console.log('Current payment status:', payment.status);
+                    console.log('No status change needed - no log created');
                 }
+            } else {
+                console.log('❌ MoMo transaction status check failed');
+                console.log('Result code:', response.resultCode);
+                console.log('Message:', response.message);
+                console.log('Payment status remains:', payment.status);
+
+                // No log created for failed checks unless status actually changes
             }
 
             return {
@@ -649,9 +724,16 @@ class MomoPaymentService {
      * @param {string} paymentStatus - Payment status
      * @param {Object} paymentInfo - Payment information
      */
-    static async sendPaymentNotificationEmail(email, username, order, paymentStatus, paymentInfo) {
+    static async sendPaymentNotificationEmail(
+        email,
+        username,
+        order,
+        paymentStatus,
+        paymentInfo,
+    ) {
         try {
-            const { amount, transId, payType, message, resultCode } = paymentInfo;
+            const { amount, transId, payType, message, resultCode } =
+                paymentInfo;
 
             let subject = '';
             let emailContent = '';
@@ -811,7 +893,6 @@ class MomoPaymentService {
             };
 
             await EmailService.transporter.sendMail(mailOptions);
-            
         } catch (error) {
             console.error('Send payment notification email error:', error);
             throw error;
