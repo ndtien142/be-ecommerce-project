@@ -70,7 +70,11 @@ const CustomerPaymentOption = require('./payment/customerPaymentOptions')(
 // Import shipping models
 const shippingMethod = require('./order/shippingMethods')(sequelize);
 
-// Import promotion model
+// Import promotion models
+const Coupon = require('./promotions/coupon')(sequelize);
+const UserCoupon = require('./promotions/userCoupon')(sequelize);
+const OrderCoupon = require('./promotions/orderCoupon')(sequelize);
+const ProductSale = require('./promotions/productSale')(sequelize);
 // const Promotion = require('./promotions/promotions')(sequelize);
 
 // Assign models to the database object
@@ -117,7 +121,11 @@ database.PaymentMethod = PaymentMethod;
 // Shipping models
 database.ShippingMethod = shippingMethod;
 
-// Promotion model
+// Promotion models
+database.Coupon = Coupon;
+database.UserCoupon = UserCoupon;
+database.OrderCoupon = OrderCoupon;
+database.ProductSale = ProductSale;
 // database.Promotion = Promotion;
 
 // Define associations
@@ -478,6 +486,68 @@ database.UserAddress.hasMany(database.Order, {
 //     otherKey: 'sku_id',
 //     as: 'skus',
 // });
+
+// ===== PROMOTION ASSOCIATIONS =====
+
+// User & UserCoupon (1-N)
+database.User.hasMany(database.UserCoupon, {
+    foreignKey: 'user_id',
+    as: 'user_coupons',
+});
+database.UserCoupon.belongsTo(database.User, {
+    foreignKey: 'user_id',
+    as: 'user',
+});
+
+// Coupon & UserCoupon (1-N)
+database.Coupon.hasMany(database.UserCoupon, {
+    foreignKey: 'coupon_id',
+    as: 'user_coupons',
+});
+database.UserCoupon.belongsTo(database.Coupon, {
+    foreignKey: 'coupon_id',
+    as: 'coupon',
+});
+
+// Order & OrderCoupon (1-N)
+database.Order.hasMany(database.OrderCoupon, {
+    foreignKey: 'order_id',
+    as: 'order_coupons',
+});
+database.OrderCoupon.belongsTo(database.Order, {
+    foreignKey: 'order_id',
+    as: 'order',
+});
+
+// Coupon & OrderCoupon (1-N)
+database.Coupon.hasMany(database.OrderCoupon, {
+    foreignKey: 'coupon_id',
+    as: 'order_coupons',
+});
+database.OrderCoupon.belongsTo(database.Coupon, {
+    foreignKey: 'coupon_id',
+    as: 'coupon',
+});
+
+// UserCoupon & OrderCoupon (1-N)
+database.UserCoupon.hasMany(database.OrderCoupon, {
+    foreignKey: 'user_coupon_id',
+    as: 'order_coupons',
+});
+database.OrderCoupon.belongsTo(database.UserCoupon, {
+    foreignKey: 'user_coupon_id',
+    as: 'user_coupon',
+});
+
+// Product & ProductSale (1-N)
+database.Product.hasMany(database.ProductSale, {
+    foreignKey: 'product_id',
+    as: 'product_sales',
+});
+database.ProductSale.belongsTo(database.Product, {
+    foreignKey: 'product_id',
+    as: 'product',
+});
 
 // Sync the models with the database
 sequelize

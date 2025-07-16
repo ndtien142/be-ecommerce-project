@@ -35,10 +35,36 @@ module.exports = (sequelize) => {
             allowNull: false,
             defaultValue: 'pending_confirmation',
         },
+        // Thông tin giá tiền
+        subtotal: {
+            type: DataTypes.DECIMAL(12, 2),
+            allowNull: false,
+            defaultValue: 0.0,
+            comment: 'Tổng tiền sản phẩm chưa tính giảm giá',
+        },
+        discount_amount: {
+            type: DataTypes.DECIMAL(12, 2),
+            allowNull: false,
+            defaultValue: 0.0,
+            comment: 'Tổng tiền giảm giá từ coupon',
+        },
+        shipping_discount: {
+            type: DataTypes.DECIMAL(12, 2),
+            allowNull: false,
+            defaultValue: 0.0,
+            comment: 'Tiền giảm phí ship',
+        },
         total_amount: {
             type: DataTypes.DECIMAL(12, 2),
             allowNull: false,
             defaultValue: 0.0,
+            comment: 'Tổng tiền sau khi trừ tất cả giảm giá',
+        },
+        // Thông tin coupon
+        coupon_codes: {
+            type: DataTypes.JSON,
+            allowNull: true,
+            comment: 'Danh sách mã coupon đã sử dụng',
         },
         note: {
             type: DataTypes.TEXT,

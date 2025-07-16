@@ -20,5 +20,7 @@ router.use('/v1/api/notification', require('./notification'));
 router.use('/v1/api/order', require('./order'));
 router.use('/v1/api/job', require('./job'));
 router.use('/v1/api/dashboard', require('./dashboard'));
+router.use('/v1/api/coupons', require('./coupon'));
+router.use('/v1/api/product-sales', require('./product-sale'));
 
 module.exports = router;

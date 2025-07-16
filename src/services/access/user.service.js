@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const database = require('../../models');
 const { generateuserId } = require('../../utils');
 const { BadRequestError } = require('../../core/error.response');
+const { toCamel } = require('../../utils/common.utils');
 
 class UserService {
     static async createUser({
@@ -58,7 +59,7 @@ class UserService {
 
             await transaction.commit();
 
-            return {
+            return toCamel({
                 userId: account.user_code,
                 username: account.username,
                 roleId: account.fk_role_id,
@@ -74,7 +75,7 @@ class UserService {
                         address: profile.address,
                     },
                 ],
-            };
+            });
         } catch (error) {
             await transaction.rollback();
             throw error;
@@ -122,7 +123,7 @@ class UserService {
 
             await transaction.commit();
 
-            return { account, profile };
+            return toCamel({ account, profile });
         } catch (error) {
             await transaction.rollback();
             throw error;
@@ -137,10 +138,10 @@ class UserService {
 
         account.is_delete = true;
         await account.save();
-        return {
+        return toCamel({
             userId,
             isDeleted: account.is_delete,
-        };
+        });
     }
 
     static async markUserAsBlocked(userId, isBlock) {
@@ -151,10 +152,10 @@ class UserService {
 
         account.is_block = isBlock;
         await account.save();
-        return {
+        return toCamel({
             userId,
             isBlock: account.is_block,
-        };
+        });
     }
 
     static async getUser(userId) {
@@ -175,7 +176,7 @@ class UserService {
             throw new Error('User not found');
         }
 
-        return {
+        return toCamel({
             userId: account.user_code,
             username: account.username,
             isActive: account.is_active,
@@ -196,7 +197,7 @@ class UserService {
                         avatarUrl: item.avatar_url,
                     };
                 }) || [],
-        };
+        });
     }
 
     static async getUsers({
@@ -223,7 +224,7 @@ class UserService {
                 order: [['create_time', 'DESC']],
             });
 
-        return {
+        return toCamel({
             items: accounts.map((account) => {
                 return {
                     userId: account.user_code,
@@ -254,7 +255,7 @@ class UserService {
                 totalPages: Math.ceil(count / parseInt(limit)),
                 totalItems: count,
             },
-        };
+        });
     }
 }
 
