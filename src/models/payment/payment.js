@@ -14,7 +14,7 @@ module.exports = (sequelize) => {
             external_order_id: {
                 type: DataTypes.STRING,
                 allowNull: true,
-                unique: true, // Ensure this is unique for mapping with MoMo
+                unique: 'external_order_id_unique', // Ensure this is unique for mapping with MoMo
             },
             payment_method: {
                 type: DataTypes.ENUM(

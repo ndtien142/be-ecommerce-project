@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
         name: {
             type: DataTypes.STRING(150),
             allowNull: false,
-            unique: true,
+            unique: 'supplier_name_unique',
         },
         contact_name: {
             type: DataTypes.STRING(100),

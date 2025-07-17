@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
         code: {
             type: DataTypes.STRING(50),
             allowNull: false,
-            unique: true,
+            unique: 'shipping_method_code_unique', // Ensure shipping method codes are unique
         },
         name: {
             type: DataTypes.STRING(150),

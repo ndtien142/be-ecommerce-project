@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
         phone_number: {
             type: DataTypes.STRING(20),
             allowNull: true,
-            unique: true,
+            unique: 'user_phone_number_unique', // Ensure phone numbers are unique
         },
         first_name: {
             type: DataTypes.STRING(50),
