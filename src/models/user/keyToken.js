@@ -14,7 +14,7 @@ function model(sequelize) {
         user_id: {
             type: DataTypes.INTEGER,
             allowNull: false,
-            unique: true,
+            unique: 'user_id_unique', // Ensure user_id is unique
         },
         privateKey: {
             type: DataTypes.TEXT,

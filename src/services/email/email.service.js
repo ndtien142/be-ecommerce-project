@@ -163,66 +163,92 @@ class EmailService {
     }
 
     // Order-related email methods
-    async sendOrderConfirmationEmail(email, username, order) {
+    async sendOrderConfirmationEmail(
+        email,
+        username,
+        order,
+        isConfirmed = false,
+    ) {
+        console.log('Sending order confirmation email for order:', order);
+        const orderDetailsHtml = order.lineItems
+            .map(
+                (item) => `
+            <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 10px;">
+                    <img src="${item.product.thumbnail_url}" alt="${item.product.name}" width="60" style="border-radius: 4px; margin-right: 10px; vertical-align: middle;">
+                    ${item.product.name}
+                </td>
+                <td style="padding: 10px; text-align: center;">${item.quantity}</td>
+                <td style="padding: 10px; text-align: right;">${(item.price * item.quantity).toLocaleString('vi-VN')} VND</td>
+            </tr>
+        `,
+            )
+            .join('');
+
+        const orderUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard/orders/${order.id}`;
+
         const mailOptions = {
             from: process.env.EMAIL_FROM || 'noreply@yourapp.com',
             to: email,
-            subject: `Xác nhận đơn hàng #${order.id}`,
+            subject: `${isConfirmed ? 'Xác nhận đơn hàng' : 'Đặt hàng thành công'} #${order.id}`,
             html: `
-                <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
-                    <h2 style="color: #333; text-align: center;">Xác nhận đơn hàng</h2>
-                    <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                        <p>Xin chào <strong>${username}</strong>,</p>
-                        <p>Cảm ơn bạn đã đặt hàng! Đơn hàng của bạn đã được xác nhận và đang được xử lý.</p>
-                        
-                        <div style="background: white; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                            <h3 style="color: #333; margin-top: 0;">Thông tin đơn hàng</h3>
-                            <p><strong>Mã đơn hàng:</strong> #${order.id}</p>
-                            <p><strong>Ngày đặt:</strong> ${new Date(order.orderedDate || order.ordered_date).toLocaleDateString('vi-VN')}</p>
-                            <p><strong>Tổng tiền:</strong> ${(order.totalAmount || order.total_amount).toLocaleString('vi-VN')} VND</p>
-                            <p><strong>Trạng thái:</strong> ${this.getOrderStatusText(order.status)}</p>
-                        </div>
-
-                        ${order.lineItems ? this.formatOrderItems(order.lineItems) : ''}
-
-                        <div style="background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                            <h4 style="color: #1976d2; margin-top: 0;">Thông tin giao hàng</h4>
-                            ${
-                                order.address
-                                    ? `
-                                <p><strong>Địa chỉ:</strong> ${order.address.fullAddress || order.address.full_address}</p>
-                                <p><strong>Số điện thoại:</strong> ${order.address.phoneNumber || order.address.phone_number}</p>
-                            `
-                                    : ''
-                            }
-                            <p><strong>Phương thức vận chuyển:</strong> ${order.shippingMethod?.name || 'Chưa xác định'}</p>
-                            <p><strong>Phí vận chuyển:</strong> ${(order.shippingFee || order.shipping_fee || 0).toLocaleString('vi-VN')} VND</p>
-                        </div>
-
-                        <p>Bạn có thể theo dõi đơn hàng của mình tại:</p>
-                        <div style="text-align: center; margin: 20px 0;">
-                            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/orders/${order.id}" 
-                               style="background: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
-                                Theo dõi đơn hàng
-                            </a>
-                        </div>
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px;">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <h1 style="color: #4CAF50;">${isConfirmed ? 'Xác nhận đơn hàng' : 'Đặt hàng thành công'}</h1>
                     </div>
+                    <p>Xin chào <strong>${username}</strong>,</p>
+                    <p>Cảm ơn bạn đã đặt hàng tại cửa hàng của chúng tôi. ${isConfirmed ? 'Chúng tôi đã xác nhận đơn hàng củ bạn, đơn hàng của bạn đang được xử lý và sẽ được giao đến bạn trong thời gian sớm nhất' : 'Đơn hàng của bạn đã được ghi nhận và đang được xử lý.'}</p>
+                    
+                    <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                        <h3 style="margin-top: 0; color: #333;">Chi tiết đơn hàng #${order.id}</h3>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #eee;">
+                                    <th style="padding: 10px; text-align: left;">Sản phẩm</th>
+                                    <th style="padding: 10px; text-align: center;">Số lượng</th>
+                                    <th style="padding: 10px; text-align: right;">Thành tiền</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${orderDetailsHtml}
+                            </tbody>
+                        </table>
+                        <hr style="border: none; border-top: 1px solid #eee; margin: 15px 0;">
+                        <table style="width: 100%;">
+                            <tr>
+                                <td style="text-align: right;">Phí vận chuyển:</td>
+                                <td style="text-align: right; font-weight: bold;">${order.shipping_fee.toLocaleString('vi-VN')} VND</td>
+                            </tr>
+                            <tr>
+                                <td style="text-align: right; font-size: 18px; font-weight: bold;">Tổng cộng:</td>
+                                <td style="text-align: right; font-size: 18px; font-weight: bold; color: #d9534f;">${order.total_amount.toLocaleString('vi-VN')} VND</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="${orderUrl}" 
+                           style="background: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                            Theo dõi đơn hàng
+                        </a>
+                    </div>
+                    <p style="color: #666; font-size: 14px;">Chúng tôi sẽ thông báo cho bạn khi đơn hàng được vận chuyển.</p>
                 </div>
             `,
         };
 
         try {
             const info = await this.transporter.sendMail(mailOptions);
-            return {
-                success: true,
-                messageId: info.messageId,
-            };
+            if (process.env.NODE_ENV === 'development') {
+                console.log(
+                    'Order confirmation email sent. Preview URL:',
+                    nodemailer.getTestMessageUrl(info),
+                );
+            }
+            return { success: true, messageId: info.messageId };
         } catch (error) {
             console.error('Order confirmation email sending failed:', error);
-            return {
-                success: false,
-                error: error.message,
-            };
+            return { success: false, error: error.message };
         }
     }
 

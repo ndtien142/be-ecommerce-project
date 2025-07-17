@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
         name: {
             type: DataTypes.STRING(100),
             allowNull: false,
-            unique: true,
+            unique: 'category_name_slug_unique',
         },
         description: {
             type: DataTypes.TEXT,
@@ -22,7 +22,7 @@ module.exports = (sequelize) => {
         slug: {
             type: DataTypes.STRING(255),
             allowNull: false,
-            unique: true,
+            unique: 'category_name_slug_unique',
         },
         parent_id: {
             type: DataTypes.INTEGER,

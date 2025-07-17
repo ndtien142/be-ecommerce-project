@@ -15,7 +15,7 @@ function model(sequelize) {
         user_login: {
             type: DataTypes.STRING(60),
             allowNull: false,
-            unique: true,
+            unique: 'user_login_unique',
         },
         user_pass: {
             type: DataTypes.STRING(255),
@@ -28,7 +28,7 @@ function model(sequelize) {
         user_email: {
             type: DataTypes.STRING(100),
             allowNull: false,
-            unique: true,
+            unique: 'user_email_unique', // Ensure user emails are unique
         },
         user_url: {
             type: DataTypes.STRING(255),

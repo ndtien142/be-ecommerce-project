@@ -14,7 +14,7 @@ module.exports = (sequelize) => {
             code: {
                 type: DataTypes.STRING(50),
                 allowNull: false,
-                unique: true,
+                unique: 'shipping_method_code_unique',
             }, // Mã: ghn, ghtk, cod, viettel...
             description: { type: DataTypes.TEXT, allowNull: true },
             status: {
