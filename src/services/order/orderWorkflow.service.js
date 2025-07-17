@@ -332,7 +332,14 @@ class OrderWorkflowService {
      * Shipper nộp tiền COD
      * Chỉ cho COD: delivered → payment completed
      */
-    static async completeCODPayment(orderId, actorId = null, actorName = null, note = null, ipAddress = null, userAgent = null) {
+    static async completeCODPayment(
+        orderId,
+        actorId = null,
+        actorName = null,
+        note = null,
+        ipAddress = null,
+        userAgent = null,
+    ) {
         const order = await database.Order.findByPk(orderId, {
             include: [{ model: database.Payment, as: 'payment' }],
         });
@@ -388,7 +395,14 @@ class OrderWorkflowService {
      * shipping/delivered → returned
      * Tự động xử lý refund nếu cần
      */
-    static async returnOrder(orderId, reason = null, actorId = null, actorName = null, ipAddress = null, userAgent = null) {
+    static async returnOrder(
+        orderId,
+        reason = null,
+        actorId = null,
+        actorName = null,
+        ipAddress = null,
+        userAgent = null,
+    ) {
         const order = await database.Order.findByPk(orderId, {
             include: [{ model: database.Payment, as: 'payment' }],
         });
@@ -528,7 +542,14 @@ class OrderWorkflowService {
      * Hủy đơn hàng
      * pending_confirmation/pending_pickup → cancelled
      */
-    static async cancelOrder(orderId, reason = null, actorId = null, actorName = null, ipAddress = null, userAgent = null) {
+    static async cancelOrder(
+        orderId,
+        reason = null,
+        actorId = null,
+        actorName = null,
+        ipAddress = null,
+        userAgent = null,
+    ) {
         const order = await database.Order.findByPk(orderId, {
             include: [
                 {
