@@ -332,7 +332,7 @@ class OrderWorkflowService {
      * Shipper nộp tiền COD
      * Chỉ cho COD: delivered → payment completed
      */
-    static async completeCODPayment(orderId) {
+    static async completeCODPayment(orderId, actorId = null, actorName = null, note = null, ipAddress = null, userAgent = null) {
         const order = await database.Order.findByPk(orderId, {
             include: [{ model: database.Payment, as: 'payment' }],
         });
@@ -360,6 +360,24 @@ class OrderWorkflowService {
         order.payment.paid_at = new Date();
         await order.payment.save();
 
+        // Thêm log cho hoàn tất COD
+        await OrderLogService.createLog({
+            orderId: order.id,
+            fromStatus: order.status,
+            toStatus: order.status,
+            action: 'cod_completed',
+            actorType: actorId ? 'admin' : 'system',
+            actorId,
+            actorName,
+            note,
+            metadata: {
+                payment_method: 'cash',
+                amount: order.payment.amount,
+            },
+            ipAddress,
+            userAgent,
+        });
+
         // Reload order để có dữ liệu mới nhất
         await order.reload();
         return order;
@@ -370,7 +388,7 @@ class OrderWorkflowService {
      * shipping/delivered → returned
      * Tự động xử lý refund nếu cần
      */
-    static async returnOrder(orderId, reason = null) {
+    static async returnOrder(orderId, reason = null, actorId = null, actorName = null, ipAddress = null, userAgent = null) {
         const order = await database.Order.findByPk(orderId, {
             include: [{ model: database.Payment, as: 'payment' }],
         });
@@ -386,10 +404,26 @@ class OrderWorkflowService {
         const transaction = await database.sequelize.transaction();
         try {
             // Cập nhật trạng thái đơn hàng
+            const fromStatus = order.status;
             order.status = 'returned';
             if (reason)
                 order.note = (order.note || '') + `\nLý do trả hàng: ${reason}`;
             await order.save({ transaction });
+
+            // Tạo log trả hàng
+            await OrderLogService.createLog({
+                orderId: order.id,
+                fromStatus,
+                toStatus: 'returned',
+                action: 'returned',
+                actorType: actorId ? 'customer' : 'admin',
+                actorId,
+                actorName,
+                note: reason,
+                ipAddress,
+                userAgent,
+                transaction,
+            });
 
             // Xử lý refund nếu đã thanh toán
             if (order.payment && order.payment.status === 'completed') {
@@ -404,6 +438,21 @@ class OrderWorkflowService {
 
                         order.payment.status = 'refunded';
                         await order.payment.save({ transaction });
+
+                        // Log refund
+                        await OrderLogService.createLog({
+                            orderId: order.id,
+                            fromStatus: 'returned',
+                            toStatus: 'returned',
+                            action: 'refunded',
+                            actorType: 'system',
+                            note: 'Hoàn tiền MoMo khi trả hàng',
+                            metadata: {
+                                refund_amount: order.payment.amount,
+                                payment_method: 'momo',
+                            },
+                            transaction,
+                        });
                     } catch (refundError) {
                         console.error('MoMo refund failed:', refundError);
                         throw new BadRequestError('Hoàn tiền MoMo thất bại');
@@ -412,6 +461,21 @@ class OrderWorkflowService {
                     // COD đã thu tiền thì đánh dấu cần hoàn tiền thủ công
                     order.payment.status = 'refunded';
                     await order.payment.save({ transaction });
+
+                    // Log refund
+                    await OrderLogService.createLog({
+                        orderId: order.id,
+                        fromStatus: 'returned',
+                        toStatus: 'returned',
+                        action: 'refunded',
+                        actorType: 'system',
+                        note: 'Hoàn tiền COD khi trả hàng',
+                        metadata: {
+                            refund_amount: order.payment.amount,
+                            payment_method: 'cash',
+                        },
+                        transaction,
+                    });
                 }
             }
 
@@ -464,7 +528,7 @@ class OrderWorkflowService {
      * Hủy đơn hàng
      * pending_confirmation/pending_pickup → cancelled
      */
-    static async cancelOrder(orderId, reason = null) {
+    static async cancelOrder(orderId, reason = null, actorId = null, actorName = null, ipAddress = null, userAgent = null) {
         const order = await database.Order.findByPk(orderId, {
             include: [
                 {
@@ -497,10 +561,32 @@ class OrderWorkflowService {
         const transaction = await database.sequelize.transaction();
         try {
             // Cập nhật trạng thái đơn hàng
+            const fromStatus = order.status;
             order.status = 'cancelled';
             if (reason)
                 order.note = (order.note || '') + `\nLý do hủy: ${reason}`;
             await order.save({ transaction });
+
+            // Xác định actorType: admin hay customer
+            let actorType = 'admin';
+            if (actorId && order.user && order.user.id === actorId) {
+                actorType = 'customer';
+            }
+
+            // Tạo log hủy đơn
+            await OrderLogService.createLog({
+                orderId: order.id,
+                fromStatus,
+                toStatus: 'cancelled',
+                action: 'cancelled',
+                actorType,
+                actorId,
+                actorName,
+                note: reason,
+                ipAddress,
+                userAgent,
+                transaction,
+            });
 
             // Xử lý payment
             if (order.payment) {
@@ -509,17 +595,18 @@ class OrderWorkflowService {
                     order.payment.payment_method === 'momo'
                 ) {
                     // Refund MoMo nếu đã thanh toán
-                    try {
-                        await MomoPaymentService.refundTransaction(
-                            order.payment.transaction_id,
-                            order.payment.amount,
-                            `Hoàn tiền hủy đơn ${order.id} - ${reason || 'Hủy đơn'}`,
-                        );
-                        order.payment.status = 'refunded';
-                    } catch (refundError) {
-                        console.error('MoMo refund failed:', refundError);
-                        order.payment.status = 'failed';
-                    }
+                    // try {
+                    //     await MomoPaymentService.refundTransaction(
+                    //         order.payment.transaction_id,
+                    //         order.payment.amount,
+                    //         `Hoàn tiền hủy đơn ${order.id} - ${reason || 'Hủy đơn'}`,
+                    //     );
+                    //     order.payment.status = 'refunded';
+                    // } catch (refundError) {
+                    //     console.error('MoMo refund failed:', refundError);
+                    //     order.payment.status = 'failed';
+                    // }
+                    order.payment.status = 'cancelled';
                 } else {
                     order.payment.status = 'cancelled';
                 }
