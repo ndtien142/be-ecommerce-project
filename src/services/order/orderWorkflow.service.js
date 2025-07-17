@@ -34,7 +34,17 @@ class OrderWorkflowService {
         userAgent = null,
     ) {
         const order = await database.Order.findByPk(orderId, {
-            include: [{ model: database.Payment, as: 'payment' }],
+            include: [
+                {
+                    model: database.OrderLineItem,
+                    as: 'lineItems',
+                    include: [{ model: database.Product, as: 'product' }],
+                },
+                { model: database.UserAddress, as: 'address' },
+                { model: database.ShippingMethod, as: 'shippingMethod' },
+                { model: database.Payment, as: 'payment' },
+                { model: database.User, as: 'user' },
+            ],
         });
         if (!order) {
             throw new NotFoundError('Đơn hàng không tồn tại');
@@ -94,6 +104,23 @@ class OrderWorkflowService {
             });
 
             await transaction.commit();
+            // Send order confirmation email
+            try {
+                if (order.user && order.user.user_email) {
+                    await EmailService.sendOrderConfirmationEmail(
+                        order.user.user_email,
+                        order.user.user_nickname || order.user.user_login,
+                        order,
+                        true,
+                    );
+                }
+            } catch (emailError) {
+                console.error(
+                    'Failed to send order confirmation email:',
+                    emailError,
+                );
+                // Don't throw error - email failure shouldn't break order creation
+            }
 
             // Reload order để có dữ liệu mới nhất sau commit
             await order.reload();
@@ -273,23 +300,23 @@ class OrderWorkflowService {
             // Reload order để có dữ liệu mới nhất sau commit
             await order.reload();
 
-            // Gửi email thông báo giao hàng thành công
-            if (order.user && order.user.user_email) {
-                try {
-                    await EmailService.sendOrderStatusUpdateEmail(
-                        order.user.user_email,
-                        order.user.user_nickname || order.user.user_login,
-                        order,
-                        'delivered',
-                    );
-                    console.log(
-                        `Delivery email sent to ${order.user.user_email} for order ${order.id}`,
-                    );
-                } catch (emailError) {
-                    console.error('Failed to send delivery email:', emailError);
-                    // Không throw error để không ảnh hưởng đến flow chính
-                }
-            }
+            // // Gửi email thông báo giao hàng thành công
+            // if (order.user && order.user.user_email) {
+            //     try {
+            //         await EmailService.sendOrderStatusUpdateEmail(
+            //             order.user.user_email,
+            //             order.user.user_nickname || order.user.user_login,
+            //             order,
+            //             'delivered',
+            //         );
+            //         console.log(
+            //             `Delivery email sent to ${order.user.user_email} for order ${order.id}`,
+            //         );
+            //     } catch (emailError) {
+            //         console.error('Failed to send delivery email:', emailError);
+            //         // Không throw error để không ảnh hưởng đến flow chính
+            //     }
+            // }
 
             return order;
         } catch (error) {
