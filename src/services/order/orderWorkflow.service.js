@@ -692,13 +692,24 @@ class OrderWorkflowService {
     /**
      * Lấy workflow hiện tại và các hành động có thể thực hiện
      */
-    static async getOrderWorkflow(orderId) {
+    static async getOrderWorkflow(orderId, userId) {
         const order = await database.Order.findByPk(orderId, {
             include: [{ model: database.Payment, as: 'payment' }],
         });
 
         if (!order) {
             throw new NotFoundError('Đơn hàng không tồn tại');
+        }
+
+        const foundUser = await database.User.findByPk(userId, {
+            include: [{ model: database.Role, as: 'role' }],
+        });
+
+        console.log('user ID: -------', userId);
+        console.log('foundUser: -------', foundUser);
+
+        if (!foundUser) {
+            throw new NotFoundError('Người dùng không tồn tại');
         }
 
         const workflow = {
@@ -708,33 +719,96 @@ class OrderWorkflowService {
             availableActions: [],
         };
 
-        // Xác định các hành động có thể thực hiện
-        switch (order.status) {
-            case 'pending_confirmation':
-                workflow.availableActions = ['confirm', 'cancel'];
-                break;
-            case 'pending_pickup':
-                workflow.availableActions = ['pickup', 'cancel'];
-                break;
-            case 'shipping':
-                workflow.availableActions = ['deliver', 'return'];
-                break;
-            case 'delivered':
-                workflow.availableActions = ['customer_confirm', 'return'];
-                if (
-                    order.payment?.payment_method === 'cash' &&
-                    order.payment?.status === 'pending'
-                ) {
-                    workflow.availableActions.push('complete_cod_payment');
+        // Kiểm tra nếu đã quá 3 ngày kể từ khi giao hàng thì không cho trả hàng
+        let canReturn = true;
+        if (
+            order.status === 'delivered' ||
+            order.status === 'customer_confirmed'
+        ) {
+            const deliveredDate =
+                order.delivered_date || order.customer_confirmed_date;
+            if (deliveredDate) {
+                const now = new Date();
+                const diffMs = now - new Date(deliveredDate);
+                const diffDays = diffMs / (1000 * 60 * 60 * 24);
+                if (diffDays > 3) {
+                    canReturn = false;
                 }
-                break;
-            case 'customer_confirmed':
-                workflow.availableActions = ['return']; // Vẫn có thể trả hàng trong thời gian nhất định
-                break;
-            case 'returned':
-            case 'cancelled':
-                workflow.availableActions = []; // Không có hành động nào
-                break;
+            }
+        }
+
+        if (foundUser.role.name === 'admin') {
+            // Admin có thể thực hiện tất cả hành động
+            // Xác định các hành động có thể thực hiện
+            switch (order.status) {
+                case 'pending_confirmation':
+                    workflow.availableActions = ['confirm', 'cancel'];
+                    break;
+                case 'pending_pickup':
+                    workflow.availableActions = ['pickup', 'cancel'];
+                    break;
+                case 'shipping':
+                    workflow.availableActions = ['deliver', 'return'];
+                    break;
+                case 'delivered':
+                    workflow.availableActions = [];
+                    if (
+                        order.payment?.payment_method === 'cash' &&
+                        order.payment?.status === 'pending'
+                    ) {
+                        workflow.availableActions.push('complete_cod_payment');
+                    }
+                    break;
+                case 'customer_confirmed':
+                    if (canReturn) {
+                        workflow.availableActions = ['return']; // Vẫn có thể trả hàng trong thời gian nhất định
+                    }
+                    break;
+                case 'returned':
+                case 'cancelled':
+                    workflow.availableActions = []; // Không có hành động nào
+                    break;
+            }
+        } else {
+            // Xác định các hành động có thể thực hiện
+            switch (order.status) {
+                case 'pending_confirmation':
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = ['cancel'];
+                    }
+                    break;
+                case 'pending_pickup':
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = ['cancel'];
+                    }
+                    break;
+                case 'shipping':
+                    workflow.availableActions = [];
+                    break;
+                case 'delivered':
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = [
+                            'customer_confirm',
+                            'return',
+                        ];
+                    } else {
+                        workflow.availableActions = ['customer_confirm'];
+                    }
+                    if (
+                        order.payment?.payment_method === 'cash' &&
+                        order.payment?.status === 'pending'
+                    ) {
+                        workflow.availableActions.push('complete_cod_payment');
+                    }
+                    break;
+                case 'customer_confirmed':
+                    workflow.availableActions = ['return']; // Vẫn có thể trả hàng trong thời gian nhất định
+                    break;
+                case 'returned':
+                case 'cancelled':
+                    workflow.availableActions = []; // Không có hành động nào
+                    break;
+            }
         }
 
         return workflow;

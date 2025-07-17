@@ -141,8 +141,12 @@ class OrderWorkflowController {
      */
     getOrderWorkflow = asyncHandler(async (req, res) => {
         const { orderId } = req.params;
+        const userId = req.user?.userId; // Optional: pass userId if needed for permissions
 
-        const workflow = await OrderWorkflowService.getOrderWorkflow(orderId);
+        const workflow = await OrderWorkflowService.getOrderWorkflow(
+            orderId,
+            userId,
+        );
 
         new SuccessResponse({
             message: 'Lấy workflow đơn hàng thành công',
