@@ -850,13 +850,25 @@ class OrderWorkflowService {
             // Xác định các hành động có thể thực hiện
             switch (order.status) {
                 case 'pending_confirmation':
-                    workflow.availableActions = ['confirm', 'cancel'];
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = ['confirm', 'cancel'];
+                    } else {
+                        workflow.availableActions = ['confirm'];
+                    }
                     break;
                 case 'pending_pickup':
-                    workflow.availableActions = ['pickup', 'cancel'];
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = ['pickup', 'cancel'];
+                    } else {
+                        workflow.availableActions = ['pickup'];
+                    }
                     break;
                 case 'shipping':
-                    workflow.availableActions = ['deliver', 'return'];
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = ['deliver', 'return'];
+                    } else {
+                        workflow.availableActions = ['deliver'];
+                    }
                     break;
                 case 'delivered':
                     workflow.availableActions = [];
@@ -910,7 +922,9 @@ class OrderWorkflowService {
                     }
                     break;
                 case 'customer_confirmed':
-                    workflow.availableActions = ['return']; // Vẫn có thể trả hàng trong thời gian nhất định
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = ['return']; // Vẫn có thể trả hàng trong thời gian nhất định
+                    }
                     break;
                 case 'returned':
                 case 'cancelled':
