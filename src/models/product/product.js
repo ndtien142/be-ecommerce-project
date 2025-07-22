@@ -28,7 +28,10 @@ module.exports = (sequelize) => {
         slug: {
             type: DataTypes.STRING(255),
             allowNull: false,
-            unique: true,
+            unique: {
+                name: 'product_name_slug_unique',
+                msg: 'Product name and slug must be unique together',
+            },
         },
         status: {
             type: DataTypes.ENUM('active', 'inactive', 'archived', 'draft'),

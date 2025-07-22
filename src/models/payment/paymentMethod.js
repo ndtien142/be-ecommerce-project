@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
         name: {
             type: DataTypes.STRING(100),
             allowNull: false,
-            unique: true,
+            unique: 'payment_method_name_unique',
         },
         provider: {
             type: DataTypes.STRING(100),

@@ -34,7 +34,17 @@ class OrderWorkflowService {
         userAgent = null,
     ) {
         const order = await database.Order.findByPk(orderId, {
-            include: [{ model: database.Payment, as: 'payment' }],
+            include: [
+                {
+                    model: database.OrderLineItem,
+                    as: 'lineItems',
+                    include: [{ model: database.Product, as: 'product' }],
+                },
+                { model: database.UserAddress, as: 'address' },
+                { model: database.ShippingMethod, as: 'shippingMethod' },
+                { model: database.Payment, as: 'payment' },
+                { model: database.User, as: 'user' },
+            ],
         });
         if (!order) {
             throw new NotFoundError('Đơn hàng không tồn tại');
@@ -94,6 +104,23 @@ class OrderWorkflowService {
             });
 
             await transaction.commit();
+            // Send order confirmation email
+            try {
+                if (order.user && order.user.user_email) {
+                    await EmailService.sendOrderConfirmationEmail(
+                        order.user.user_email,
+                        order.user.user_nickname || order.user.user_login,
+                        order,
+                        true,
+                    );
+                }
+            } catch (emailError) {
+                console.error(
+                    'Failed to send order confirmation email:',
+                    emailError,
+                );
+                // Don't throw error - email failure shouldn't break order creation
+            }
 
             // Reload order để có dữ liệu mới nhất sau commit
             await order.reload();
@@ -273,23 +300,23 @@ class OrderWorkflowService {
             // Reload order để có dữ liệu mới nhất sau commit
             await order.reload();
 
-            // Gửi email thông báo giao hàng thành công
-            if (order.user && order.user.user_email) {
-                try {
-                    await EmailService.sendOrderStatusUpdateEmail(
-                        order.user.user_email,
-                        order.user.user_nickname || order.user.user_login,
-                        order,
-                        'delivered',
-                    );
-                    console.log(
-                        `Delivery email sent to ${order.user.user_email} for order ${order.id}`,
-                    );
-                } catch (emailError) {
-                    console.error('Failed to send delivery email:', emailError);
-                    // Không throw error để không ảnh hưởng đến flow chính
-                }
-            }
+            // // Gửi email thông báo giao hàng thành công
+            // if (order.user && order.user.user_email) {
+            //     try {
+            //         await EmailService.sendOrderStatusUpdateEmail(
+            //             order.user.user_email,
+            //             order.user.user_nickname || order.user.user_login,
+            //             order,
+            //             'delivered',
+            //         );
+            //         console.log(
+            //             `Delivery email sent to ${order.user.user_email} for order ${order.id}`,
+            //         );
+            //     } catch (emailError) {
+            //         console.error('Failed to send delivery email:', emailError);
+            //         // Không throw error để không ảnh hưởng đến flow chính
+            //     }
+            // }
 
             return order;
         } catch (error) {
@@ -305,7 +332,14 @@ class OrderWorkflowService {
      * Shipper nộp tiền COD
      * Chỉ cho COD: delivered → payment completed
      */
-    static async completeCODPayment(orderId) {
+    static async completeCODPayment(
+        orderId,
+        actorId = null,
+        actorName = null,
+        note = null,
+        ipAddress = null,
+        userAgent = null,
+    ) {
         const order = await database.Order.findByPk(orderId, {
             include: [{ model: database.Payment, as: 'payment' }],
         });
@@ -333,6 +367,24 @@ class OrderWorkflowService {
         order.payment.paid_at = new Date();
         await order.payment.save();
 
+        // Thêm log cho hoàn tất COD
+        await OrderLogService.createLog({
+            orderId: order.id,
+            fromStatus: order.status,
+            toStatus: order.status,
+            action: 'cod_completed',
+            actorType: actorId ? 'admin' : 'system',
+            actorId,
+            actorName,
+            note,
+            metadata: {
+                payment_method: 'cash',
+                amount: order.payment.amount,
+            },
+            ipAddress,
+            userAgent,
+        });
+
         // Reload order để có dữ liệu mới nhất
         await order.reload();
         return order;
@@ -343,7 +395,14 @@ class OrderWorkflowService {
      * shipping/delivered → returned
      * Tự động xử lý refund nếu cần
      */
-    static async returnOrder(orderId, reason = null) {
+    static async returnOrder(
+        orderId,
+        reason = null,
+        actorId = null,
+        actorName = null,
+        ipAddress = null,
+        userAgent = null,
+    ) {
         const order = await database.Order.findByPk(orderId, {
             include: [{ model: database.Payment, as: 'payment' }],
         });
@@ -359,10 +418,26 @@ class OrderWorkflowService {
         const transaction = await database.sequelize.transaction();
         try {
             // Cập nhật trạng thái đơn hàng
+            const fromStatus = order.status;
             order.status = 'returned';
             if (reason)
                 order.note = (order.note || '') + `\nLý do trả hàng: ${reason}`;
             await order.save({ transaction });
+
+            // Tạo log trả hàng
+            await OrderLogService.createLog({
+                orderId: order.id,
+                fromStatus,
+                toStatus: 'returned',
+                action: 'returned',
+                actorType: actorId ? 'customer' : 'admin',
+                actorId,
+                actorName,
+                note: reason,
+                ipAddress,
+                userAgent,
+                transaction,
+            });
 
             // Xử lý refund nếu đã thanh toán
             if (order.payment && order.payment.status === 'completed') {
@@ -377,6 +452,21 @@ class OrderWorkflowService {
 
                         order.payment.status = 'refunded';
                         await order.payment.save({ transaction });
+
+                        // Log refund
+                        await OrderLogService.createLog({
+                            orderId: order.id,
+                            fromStatus: 'returned',
+                            toStatus: 'returned',
+                            action: 'refunded',
+                            actorType: 'system',
+                            note: 'Hoàn tiền MoMo khi trả hàng',
+                            metadata: {
+                                refund_amount: order.payment.amount,
+                                payment_method: 'momo',
+                            },
+                            transaction,
+                        });
                     } catch (refundError) {
                         console.error('MoMo refund failed:', refundError);
                         throw new BadRequestError('Hoàn tiền MoMo thất bại');
@@ -385,6 +475,21 @@ class OrderWorkflowService {
                     // COD đã thu tiền thì đánh dấu cần hoàn tiền thủ công
                     order.payment.status = 'refunded';
                     await order.payment.save({ transaction });
+
+                    // Log refund
+                    await OrderLogService.createLog({
+                        orderId: order.id,
+                        fromStatus: 'returned',
+                        toStatus: 'returned',
+                        action: 'refunded',
+                        actorType: 'system',
+                        note: 'Hoàn tiền COD khi trả hàng',
+                        metadata: {
+                            refund_amount: order.payment.amount,
+                            payment_method: 'cash',
+                        },
+                        transaction,
+                    });
                 }
             }
 
@@ -437,7 +542,14 @@ class OrderWorkflowService {
      * Hủy đơn hàng
      * pending_confirmation/pending_pickup → cancelled
      */
-    static async cancelOrder(orderId, reason = null) {
+    static async cancelOrder(
+        orderId,
+        reason = null,
+        actorId = null,
+        actorName = null,
+        ipAddress = null,
+        userAgent = null,
+    ) {
         const order = await database.Order.findByPk(orderId, {
             include: [
                 {
@@ -470,10 +582,32 @@ class OrderWorkflowService {
         const transaction = await database.sequelize.transaction();
         try {
             // Cập nhật trạng thái đơn hàng
+            const fromStatus = order.status;
             order.status = 'cancelled';
             if (reason)
                 order.note = (order.note || '') + `\nLý do hủy: ${reason}`;
             await order.save({ transaction });
+
+            // Xác định actorType: admin hay customer
+            let actorType = 'admin';
+            if (actorId && order.user && order.user.id === actorId) {
+                actorType = 'customer';
+            }
+
+            // Tạo log hủy đơn
+            await OrderLogService.createLog({
+                orderId: order.id,
+                fromStatus,
+                toStatus: 'cancelled',
+                action: 'cancelled',
+                actorType,
+                actorId,
+                actorName,
+                note: reason,
+                ipAddress,
+                userAgent,
+                transaction,
+            });
 
             // Xử lý payment
             if (order.payment) {
@@ -482,17 +616,18 @@ class OrderWorkflowService {
                     order.payment.payment_method === 'momo'
                 ) {
                     // Refund MoMo nếu đã thanh toán
-                    try {
-                        await MomoPaymentService.refundTransaction(
-                            order.payment.transaction_id,
-                            order.payment.amount,
-                            `Hoàn tiền hủy đơn ${order.id} - ${reason || 'Hủy đơn'}`,
-                        );
-                        order.payment.status = 'refunded';
-                    } catch (refundError) {
-                        console.error('MoMo refund failed:', refundError);
-                        order.payment.status = 'failed';
-                    }
+                    // try {
+                    //     await MomoPaymentService.refundTransaction(
+                    //         order.payment.transaction_id,
+                    //         order.payment.amount,
+                    //         `Hoàn tiền hủy đơn ${order.id} - ${reason || 'Hủy đơn'}`,
+                    //     );
+                    //     order.payment.status = 'refunded';
+                    // } catch (refundError) {
+                    //     console.error('MoMo refund failed:', refundError);
+                    //     order.payment.status = 'failed';
+                    // }
+                    order.payment.status = 'cancelled';
                 } else {
                     order.payment.status = 'cancelled';
                 }
@@ -665,13 +800,24 @@ class OrderWorkflowService {
     /**
      * Lấy workflow hiện tại và các hành động có thể thực hiện
      */
-    static async getOrderWorkflow(orderId) {
+    static async getOrderWorkflow(orderId, userId) {
         const order = await database.Order.findByPk(orderId, {
             include: [{ model: database.Payment, as: 'payment' }],
         });
 
         if (!order) {
             throw new NotFoundError('Đơn hàng không tồn tại');
+        }
+
+        const foundUser = await database.User.findByPk(userId, {
+            include: [{ model: database.Role, as: 'role' }],
+        });
+
+        console.log('user ID: -------', userId);
+        console.log('foundUser: -------', foundUser);
+
+        if (!foundUser) {
+            throw new NotFoundError('Người dùng không tồn tại');
         }
 
         const workflow = {
@@ -681,33 +827,110 @@ class OrderWorkflowService {
             availableActions: [],
         };
 
-        // Xác định các hành động có thể thực hiện
-        switch (order.status) {
-            case 'pending_confirmation':
-                workflow.availableActions = ['confirm', 'cancel'];
-                break;
-            case 'pending_pickup':
-                workflow.availableActions = ['pickup', 'cancel'];
-                break;
-            case 'shipping':
-                workflow.availableActions = ['deliver', 'return'];
-                break;
-            case 'delivered':
-                workflow.availableActions = ['customer_confirm', 'return'];
-                if (
-                    order.payment?.payment_method === 'cash' &&
-                    order.payment?.status === 'pending'
-                ) {
-                    workflow.availableActions.push('complete_cod_payment');
+        // Kiểm tra nếu đã quá 3 ngày kể từ khi giao hàng thì không cho trả hàng
+        let canReturn = true;
+        if (
+            order.status === 'delivered' ||
+            order.status === 'customer_confirmed'
+        ) {
+            const deliveredDate =
+                order.delivered_date || order.customer_confirmed_date;
+            if (deliveredDate) {
+                const now = new Date();
+                const diffMs = now - new Date(deliveredDate);
+                const diffDays = diffMs / (1000 * 60 * 60 * 24);
+                if (diffDays > 3) {
+                    canReturn = false;
                 }
-                break;
-            case 'customer_confirmed':
-                workflow.availableActions = ['return']; // Vẫn có thể trả hàng trong thời gian nhất định
-                break;
-            case 'returned':
-            case 'cancelled':
-                workflow.availableActions = []; // Không có hành động nào
-                break;
+            }
+        }
+
+        if (foundUser.role.name === 'admin') {
+            // Admin có thể thực hiện tất cả hành động
+            // Xác định các hành động có thể thực hiện
+            switch (order.status) {
+                case 'pending_confirmation':
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = ['confirm', 'cancel'];
+                    } else {
+                        workflow.availableActions = ['confirm'];
+                    }
+                    break;
+                case 'pending_pickup':
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = ['pickup', 'cancel'];
+                    } else {
+                        workflow.availableActions = ['pickup'];
+                    }
+                    break;
+                case 'shipping':
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = ['deliver', 'return'];
+                    } else {
+                        workflow.availableActions = ['deliver'];
+                    }
+                    break;
+                case 'delivered':
+                    workflow.availableActions = [];
+                    if (
+                        order.payment?.payment_method === 'cash' &&
+                        order.payment?.status === 'pending'
+                    ) {
+                        workflow.availableActions.push('complete_cod_payment');
+                    }
+                    break;
+                case 'customer_confirmed':
+                    if (canReturn) {
+                        workflow.availableActions = ['return']; // Vẫn có thể trả hàng trong thời gian nhất định
+                    }
+                    break;
+                case 'returned':
+                case 'cancelled':
+                    workflow.availableActions = []; // Không có hành động nào
+                    break;
+            }
+        } else {
+            // Xác định các hành động có thể thực hiện
+            switch (order.status) {
+                case 'pending_confirmation':
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = ['cancel'];
+                    }
+                    break;
+                case 'pending_pickup':
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = ['cancel'];
+                    }
+                    break;
+                case 'shipping':
+                    workflow.availableActions = [];
+                    break;
+                case 'delivered':
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = [
+                            'customer_confirm',
+                            'return',
+                        ];
+                    } else {
+                        workflow.availableActions = ['customer_confirm'];
+                    }
+                    if (
+                        order.payment?.payment_method === 'cash' &&
+                        order.payment?.status === 'pending'
+                    ) {
+                        workflow.availableActions.push('complete_cod_payment');
+                    }
+                    break;
+                case 'customer_confirmed':
+                    if (order.payment?.payment_method !== 'momo') {
+                        workflow.availableActions = ['return']; // Vẫn có thể trả hàng trong thời gian nhất định
+                    }
+                    break;
+                case 'returned':
+                case 'cancelled':
+                    workflow.availableActions = []; // Không có hành động nào
+                    break;
+            }
         }
 
         return workflow;

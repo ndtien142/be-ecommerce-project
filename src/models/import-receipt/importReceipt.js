@@ -21,7 +21,7 @@ module.exports = (sequelize) => {
         receipt_code: {
             type: DataTypes.STRING(100),
             allowNull: false,
-            unique: true,
+            unique: 'import_receipt_code_unique',
         },
         total_amount: {
             type: DataTypes.DECIMAL(12, 2),

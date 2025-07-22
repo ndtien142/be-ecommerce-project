@@ -260,7 +260,7 @@ class OrderService {
                 if (createdOrder.user && createdOrder.user.user_email) {
                     await EmailService.sendOrderConfirmationEmail(
                         createdOrder.user.user_email,
-                        createdOrder.user.first_name ||
+                        createdOrder.user.user_nickname ||
                             createdOrder.user.user_login,
                         createdOrder,
                     );
@@ -675,7 +675,19 @@ class OrderService {
                 internalOrderId: order.id.toString(), // Pass internal order ID for mapping
             });
 
-            const payment = await database.Payment.create(momoPayment.payment);
+            const payment = await database.Payment.create(
+                {
+                    order_id: momoPayment.payment.order_id,
+                    payment_method: 'momo',
+                    transaction_id: momoPayment.payment.transaction_id,
+                    transaction_code: null,
+                    status: 'pending',
+                    amount: momoPayment.payment.amount,
+                    gateway_response:
+                        momoPayment.payment.gateway_response || '',
+                },
+                { transaction },
+            );
 
             order.payment_id = payment.id; // Set payment ID in order
             await order.save({ transaction });
@@ -683,8 +695,8 @@ class OrderService {
             // Only commit transaction after MoMo payment is successfully created
             await transaction.commit();
 
-            // Get full order data for email
-            const fullOrder = await database.Order.findByPk(order.id, {
+            // Return order with line items and relations
+            const createdOrder = await database.Order.findByPk(order.id, {
                 include: [
                     {
                         model: database.OrderLineItem,
@@ -700,12 +712,14 @@ class OrderService {
 
             // Send order confirmation email
             try {
-                if (fullOrder.user && fullOrder.user.email) {
+                if (createdOrder.user && createdOrder.user.user_email) {
                     await EmailService.sendOrderConfirmationEmail(
-                        fullOrder.user.email,
-                        fullOrder.user.first_name || fullOrder.user.username,
-                        fullOrder,
+                        createdOrder.user.user_email,
+                        createdOrder.user.user_nickname ||
+                            createdOrder.user.user_login,
+                        createdOrder,
                     );
+                    console.log('Order confirmation email sent successfully');
                 }
             } catch (emailError) {
                 console.error(

@@ -551,7 +551,7 @@ database.ProductSale.belongsTo(database.Product, {
 
 // Sync the models with the database
 sequelize
-    .sync({ alter: true })
+    .sync() // Set alter to true for development, false for production
     .then(() => {
         console.log('Database & tables created!');
     })

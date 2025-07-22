@@ -23,7 +23,7 @@ function model(sequelize) {
         slug: {
             type: DataTypes.STRING(255),
             allowNull: true,
-            unique: true,
+            unique: 'permission_slug_unique', // Ensure permission slugs are unique
         },
     };
 

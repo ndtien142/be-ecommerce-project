@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
         name: {
             type: DataTypes.STRING(100),
             allowNull: false,
-            unique: true,
+            unique: 'tag_name_unique', // Ensure tag names are unique
         },
         description: {
             type: DataTypes.TEXT,
