@@ -5,8 +5,6 @@ const database = require('../../models');
 const { toCamel } = require('../../utils/common.utils');
 const MomoPaymentService = require('../payment/momo.service');
 const EmailService = require('../email/email.service');
-const CouponService = require('../promotion/coupon.service');
-const ProductSaleService = require('../promotion/productSale.service');
 
 class OrderService {
     // Helper method to validate stock availability
@@ -72,7 +70,6 @@ class OrderService {
         trackingNumber = null,
         shippedBy = null,
         orderedDate = new Date(),
-        couponCode = null,
     }) {
         // Validate required fields
         if (!userId) throw new BadRequestError('userId là bắt buộc');
@@ -122,43 +119,12 @@ class OrderService {
             );
         }
 
-        // Calculate product prices with sales
-        const itemsWithPrices = await OrderService.calculateProductPrices(
-            beCart.lineItems,
-        );
-
-        // Calculate initial totals
-        const initialSubtotal = itemsWithPrices.reduce(
-            (sum, item) => sum + item.total_price,
-            0,
-        );
-
-        // Process coupon discount
-        const order_data = {
-            subtotal: initialSubtotal,
-            shipping_fee: shippingFee,
-            items: itemsWithPrices,
-        };
-
-        const couponDiscount = await OrderService.processCouponDiscount(
-            userId,
-            couponCode,
-            order_data,
-        );
-
-        // Calculate final totals
-        const orderTotals = OrderService.calculateOrderTotals(
-            itemsWithPrices,
-            shippingFee,
-            couponDiscount,
-        );
-
-        // Update beCart.lineItems with calculated prices
-        beCart.lineItems = itemsWithPrices.map((item) => ({
-            ...item,
-            price: item.price,
-            total: item.total_price,
-        }));
+        // Calculate total amount
+        const totalAmount =
+            beCart.lineItems.reduce(
+                (sum, item) => sum + Number(item.total),
+                0,
+            ) + Number(shippingFee);
 
         // Validate stock availability before creating order
         await OrderService.validateStockAvailability(beCart.lineItems);
@@ -173,17 +139,11 @@ class OrderService {
                     address_id: addressId,
                     payment_id: null, // will update after payment created
                     status: 'pending_confirmation',
-                    subtotal: orderTotals.subtotal,
-                    discount_amount: orderTotals.coupon_discount_amount,
-                    shipping_discount: orderTotals.shipping_discount,
-                    total_amount: orderTotals.total_amount,
-                    coupon_codes: couponDiscount.applied_coupon
-                        ? [couponDiscount.applied_coupon.code]
-                        : null,
+                    total_amount: totalAmount,
                     note,
                     ordered_date: orderedDate,
                     shipping_method_id: shippingMethodId,
-                    shipping_fee: orderTotals.final_shipping_fee,
+                    shipping_fee: shippingFee,
                     tracking_number: trackingNumber,
                     shipped_by: shippedBy,
                 },
@@ -204,18 +164,6 @@ class OrderService {
                 );
             }
 
-            // Create order coupon record if coupon was applied
-            if (couponDiscount.applied_coupon) {
-                await CouponService.applyCouponToOrder(
-                    order.id,
-                    couponDiscount.applied_coupon.id,
-                    couponDiscount.user_coupon
-                        ? couponDiscount.user_coupon.id
-                        : null,
-                    couponDiscount.order_coupon_data,
-                );
-            }
-
             // Update product stock and sold count
             await OrderService.updateProductStock(
                 beCart.lineItems,
@@ -226,7 +174,7 @@ class OrderService {
             const payment = await database.Payment.create(
                 {
                     order_id: order.id,
-                    amount: orderTotals.total_amount,
+                    amount: totalAmount,
                     status: 'pending',
                 },
                 { transaction },
@@ -511,7 +459,6 @@ class OrderService {
         shippingFee = 0,
         orderInfo = 'Thanh toán đơn hàng',
         extraData = '',
-        couponCode = null,
     }) {
         // Validate required fields
         if (!userId) throw new BadRequestError('userId là bắt buộc');
@@ -560,43 +507,12 @@ class OrderService {
             );
         }
 
-        // Calculate product prices with sales
-        const itemsWithPrices = await OrderService.calculateProductPrices(
-            beCart.lineItems,
-        );
-
-        // Calculate initial totals
-        const initialSubtotal = itemsWithPrices.reduce(
-            (sum, item) => sum + item.total_price,
-            0,
-        );
-
-        // Process coupon discount
-        const order_data = {
-            subtotal: initialSubtotal,
-            shipping_fee: shippingFee,
-            items: itemsWithPrices,
-        };
-
-        const couponDiscount = await OrderService.processCouponDiscount(
-            userId,
-            couponCode,
-            order_data,
-        );
-
-        // Calculate final totals
-        const orderTotals = OrderService.calculateOrderTotals(
-            itemsWithPrices,
-            shippingFee,
-            couponDiscount,
-        );
-
-        // Update beCart.lineItems with calculated prices
-        beCart.lineItems = itemsWithPrices.map((item) => ({
-            ...item,
-            price: item.price,
-            total: item.total_price,
-        }));
+        // Calculate total amount
+        const totalAmount =
+            beCart.lineItems.reduce(
+                (sum, item) => sum + Number(item.total),
+                0,
+            ) + Number(shippingFee);
 
         // Validate stock availability before creating order
         await OrderService.validateStockAvailability(beCart.lineItems);
@@ -619,17 +535,11 @@ class OrderService {
                     address_id: addressId,
                     payment_id: null,
                     status: 'pending_confirmation',
-                    subtotal: orderTotals.subtotal,
-                    discount_amount: orderTotals.coupon_discount_amount,
-                    shipping_discount: orderTotals.shipping_discount,
-                    total_amount: orderTotals.total_amount,
-                    coupon_codes: couponDiscount.applied_coupon
-                        ? [couponDiscount.applied_coupon.code]
-                        : null,
+                    total_amount: totalAmount,
                     note,
                     ordered_date: new Date(),
                     shipping_method_id: shippingMethodId,
-                    shipping_fee: orderTotals.final_shipping_fee,
+                    shipping_fee: shippingFee,
                 },
                 { transaction },
             );
@@ -648,18 +558,6 @@ class OrderService {
                 );
             }
 
-            // Create order coupon record if coupon was applied
-            if (couponDiscount.applied_coupon) {
-                await CouponService.applyCouponToOrder(
-                    order.id,
-                    couponDiscount.applied_coupon.id,
-                    couponDiscount.user_coupon
-                        ? couponDiscount.user_coupon.id
-                        : null,
-                    couponDiscount.order_coupon_data,
-                );
-            }
-
             await order.save({ transaction });
 
             // Create MoMo payment first, before committing transaction
@@ -669,7 +567,7 @@ class OrderService {
             const momoPayment = await MomoPaymentService.createPayment({
                 orderId: order.id,
                 momoOrderId: momoOrderId,
-                amount: Math.round(orderTotals.total_amount), // MoMo requires integer amount
+                amount: Math.round(totalAmount), // MoMo requires integer amount
                 orderInfo: orderInfo,
                 extraData: extraData,
                 internalOrderId: order.id.toString(), // Pass internal order ID for mapping
@@ -740,138 +638,6 @@ class OrderService {
             }
             throw error;
         }
-    }
-
-    // Helper method to calculate product prices with sales
-    static async calculateProductPrices(cartItems) {
-        const itemsWithPrices = [];
-
-        for (const item of cartItems) {
-            const product = await database.Product.findByPk(item.product_id);
-            if (!product) {
-                throw new NotFoundError(
-                    `Không tìm thấy sản phẩm có ID: ${item.product_id}`,
-                );
-            }
-
-            // Check if product has active sale
-            const productSale = await ProductSaleService.getActiveProductSale(
-                item.product_id,
-            );
-
-            const price = productSale ? productSale.sale_price : product.price;
-            const original_price = product.price;
-            const discount_per_item = original_price - price;
-
-            itemsWithPrices.push({
-                ...item,
-                product_name: product.name,
-                original_price,
-                price,
-                discount_per_item,
-                total_price: price * item.quantity,
-                total_discount: discount_per_item * item.quantity,
-                product_sale_id: productSale ? productSale.id : null,
-            });
-        }
-
-        return itemsWithPrices;
-    }
-
-    // Helper method to process coupon discount
-    static async processCouponDiscount(user_id, coupon_code, order_data) {
-        if (!coupon_code) {
-            return {
-                discount_amount: 0,
-                shipping_discount: 0,
-                applied_coupon: null,
-                order_coupon_data: null,
-            };
-        }
-
-        // Validate coupon
-        const coupon = await CouponService.validateCoupon(
-            coupon_code,
-            user_id,
-            order_data,
-        );
-
-        // Calculate discount
-        const discount = CouponService.calculateDiscount(coupon, order_data);
-
-        // Check if user has this coupon (for personal vouchers)
-        const userCoupon = await database.UserCoupon.findOne({
-            where: {
-                user_id,
-                coupon_id: coupon.id,
-                is_active: true,
-            },
-        });
-
-        // Prepare order coupon data
-        const orderCouponData = {
-            coupon_code: coupon.code,
-            discount_type: coupon.type,
-            discount_value: coupon.value,
-            discount_amount: discount.discount_amount,
-            order_subtotal: order_data.subtotal,
-            shipping_fee: order_data.shipping_fee,
-            shipping_discount: discount.shipping_discount,
-            applied_products: order_data.items.map((item) => ({
-                product_id: item.product_id,
-                quantity: item.quantity,
-                price: item.price,
-            })),
-            conditions_met: {
-                min_order_amount: coupon.min_order_amount,
-                applicable_products: coupon.applicable_products,
-                applicable_categories: coupon.applicable_categories,
-            },
-        };
-
-        return {
-            discount_amount: discount.discount_amount,
-            shipping_discount: discount.shipping_discount,
-            applied_coupon: coupon,
-            user_coupon: userCoupon,
-            order_coupon_data: orderCouponData,
-        };
-    }
-
-    // Helper method to calculate order totals
-    static calculateOrderTotals(
-        items_with_prices,
-        shipping_fee,
-        coupon_discount,
-    ) {
-        const subtotal = items_with_prices.reduce(
-            (sum, item) => sum + item.total_price,
-            0,
-        );
-        const product_discount = items_with_prices.reduce(
-            (sum, item) => sum + item.total_discount,
-            0,
-        );
-        const coupon_discount_amount = coupon_discount.discount_amount || 0;
-        const shipping_discount = coupon_discount.shipping_discount || 0;
-
-        const total_discount = coupon_discount_amount + shipping_discount;
-        const final_shipping_fee = Math.max(
-            0,
-            shipping_fee - shipping_discount,
-        );
-        const total_amount =
-            subtotal - coupon_discount_amount + final_shipping_fee;
-
-        return {
-            subtotal,
-            product_discount,
-            coupon_discount_amount,
-            shipping_discount,
-            total_discount,
-            final_shipping_fee,
-            total_amount,
-        };
     }
 }
 

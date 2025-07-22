@@ -29,14 +29,11 @@ const Profile = require('./user/profile')(sequelize);
 const Role = require('./user/role')(sequelize);
 const KeyToken = require('./user/keyToken')(sequelize);
 const RefreshTokenUsed = require('./user/refreshTokenUsed')(sequelize);
-const Permission = require('./user/permission')(sequelize);
 
 // Import product-related models
 const Brand = require('./product/brand')(sequelize);
 const Product = require('./product/product')(sequelize);
 const ProductImage = require('./product/productImages')(sequelize);
-const ProductMeta = require('./product/productMeta')(sequelize);
-const Tag = require('./product/tags')(sequelize);
 
 // Import category model
 const Category = require('./categories/categories')(sequelize);
@@ -74,8 +71,6 @@ const shippingMethod = require('./order/shippingMethods')(sequelize);
 const Coupon = require('./promotions/coupon')(sequelize);
 const UserCoupon = require('./promotions/userCoupon')(sequelize);
 const OrderCoupon = require('./promotions/orderCoupon')(sequelize);
-const ProductSale = require('./promotions/productSale')(sequelize);
-// const Promotion = require('./promotions/promotions')(sequelize);
 
 // Assign models to the database object
 // User-related models
@@ -84,14 +79,11 @@ database.Profile = Profile;
 database.Role = Role;
 database.KeyToken = KeyToken;
 database.RefreshTokenUsed = RefreshTokenUsed;
-database.Permission = Permission;
 
 // Product-related models
 database.Brand = Brand;
 database.Product = Product;
 database.ProductImage = ProductImage;
-database.ProductMeta = ProductMeta;
-database.Tag = Tag;
 
 // Category model
 database.Category = Category;
@@ -125,7 +117,6 @@ database.ShippingMethod = shippingMethod;
 database.Coupon = Coupon;
 database.UserCoupon = UserCoupon;
 database.OrderCoupon = OrderCoupon;
-database.ProductSale = ProductSale;
 // database.Promotion = Promotion;
 
 // Define associations
@@ -156,18 +147,6 @@ database.RefreshTokenUsed.belongsTo(database.KeyToken, {
     as: 'key_token',
 });
 
-// Permission & Role (Many-to-Many)
-database.Permission.belongsToMany(database.Role, {
-    through: 'tb_role_permission',
-    foreignKey: 'permission_id',
-    as: 'roles',
-});
-database.Role.belongsToMany(database.Permission, {
-    through: 'tb_role_permission',
-    foreignKey: 'role_id',
-    as: 'permissions',
-});
-
 // Brand & Product
 database.Brand.hasMany(database.Product, {
     foreignKey: 'brand_id',
@@ -188,16 +167,6 @@ database.ProductImage.belongsTo(database.Product, {
     as: 'product',
 });
 
-// Product & ProductMeta (1-N)
-database.Product.hasMany(database.ProductMeta, {
-    foreignKey: 'product_id',
-    as: 'meta',
-});
-database.ProductMeta.belongsTo(database.Product, {
-    foreignKey: 'product_id',
-    as: 'product',
-});
-
 // Product & Category (Many-to-Many through product_categories)
 database.Product.belongsToMany(database.Category, {
     through: 'product_categories',
@@ -208,20 +177,6 @@ database.Product.belongsToMany(database.Category, {
 database.Category.belongsToMany(database.Product, {
     through: 'product_categories',
     foreignKey: 'category_id',
-    otherKey: 'product_id',
-    as: 'products',
-});
-
-// Product & Tag (Many-to-Many through product_tags)
-database.Product.belongsToMany(database.Tag, {
-    through: 'product_tags',
-    foreignKey: 'product_id',
-    otherKey: 'tag_id',
-    as: 'tags',
-});
-database.Tag.belongsToMany(database.Product, {
-    through: 'product_tags',
-    foreignKey: 'tag_id',
     otherKey: 'product_id',
     as: 'products',
 });
@@ -459,34 +414,6 @@ database.UserAddress.hasMany(database.Order, {
     as: 'orders',
 });
 
-// // Product & Promotion (Many-to-Many)
-// database.Product.belongsToMany(database.Promotion, {
-//     through: 'product_promotions',
-//     foreignKey: 'product_id',
-//     otherKey: 'promotion_id',
-//     as: 'promotions',
-// });
-// database.Promotion.belongsToMany(database.Product, {
-//     through: 'product_promotions',
-//     foreignKey: 'promotion_id',
-//     otherKey: 'product_id',
-//     as: 'products',
-// });
-
-// // SKU & Promotion (Many-to-Many, optional)
-// database.SKU.belongsToMany(database.Promotion, {
-//     through: 'sku_promotions',
-//     foreignKey: 'sku_id',
-//     otherKey: 'promotion_id',
-//     as: 'promotions',
-// });
-// database.Promotion.belongsToMany(database.SKU, {
-//     through: 'sku_promotions',
-//     foreignKey: 'promotion_id',
-//     otherKey: 'sku_id',
-//     as: 'skus',
-// });
-
 // ===== PROMOTION ASSOCIATIONS =====
 
 // User & UserCoupon (1-N)
@@ -537,16 +464,6 @@ database.UserCoupon.hasMany(database.OrderCoupon, {
 database.OrderCoupon.belongsTo(database.UserCoupon, {
     foreignKey: 'user_coupon_id',
     as: 'user_coupon',
-});
-
-// Product & ProductSale (1-N)
-database.Product.hasMany(database.ProductSale, {
-    foreignKey: 'product_id',
-    as: 'product_sales',
-});
-database.ProductSale.belongsTo(database.Product, {
-    foreignKey: 'product_id',
-    as: 'product',
 });
 
 // Sync the models with the database

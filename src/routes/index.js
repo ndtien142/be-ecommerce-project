@@ -2,11 +2,9 @@
 
 const express = require('express');
 const router = express.Router();
-
 router.use('/v1/api/auth', require('./access'));
 router.use('/v1/api/account', require('./account'));
 router.use('/v1/api/role', require('./role'));
-router.use('/v1/api/permission', require('./permission'));
 router.use('/v1/api/user', require('./user'));
 router.use('/v1/api/product', require('./product'));
 router.use('/v1/api/brand', require('./brand'));
@@ -21,6 +19,5 @@ router.use('/v1/api/order', require('./order'));
 router.use('/v1/api/job', require('./job'));
 router.use('/v1/api/dashboard', require('./dashboard'));
 router.use('/v1/api/coupons', require('./coupon'));
-router.use('/v1/api/product-sales', require('./product-sale'));
 
 module.exports = router;
