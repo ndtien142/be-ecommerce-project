@@ -1,10 +1,7 @@
 'use strict';
 
 const { OK, CREATED } = require('../utils/httpStatusCode');
-const {
-    SuccessResponse,
-    CreatedResponse,
-} = require('../core/success.response');
+const { SuccessResponse } = require('../core/success.response');
 const { BadRequestError } = require('../core/error.response');
 const { asyncHandler } = require('../helpers/asyncHandler');
 const CouponService = require('../services/promotion/coupon.service');
@@ -21,7 +18,7 @@ class CouponController {
             created_by: req.user.userId,
         });
 
-        new CreatedResponse({
+        new SuccessResponse({
             message: 'Coupon created successfully',
             metadata: { coupon },
         }).send(res);
@@ -57,10 +54,25 @@ class CouponController {
      */
     updateCoupon = asyncHandler(async (req, res) => {
         const { id } = req.params;
-        const coupon = await CouponService.updateCoupon(id, req.body);
+        const coupon = await CouponService.updateCoupon({ id, ...req.body });
 
         new SuccessResponse({
             message: 'Coupon updated successfully',
+            metadata: { coupon },
+        }).send(res);
+    });
+
+    /**
+     * Kích hoạt / vô hiệu hóa coupon
+     */
+    toggleCouponStatus = asyncHandler(async (req, res) => {
+        const { id } = req.params;
+        const { isActive } = req.body;
+
+        const coupon = await CouponService.toggleCouponStatus(id, isActive);
+
+        new SuccessResponse({
+            message: 'Coupon status updated successfully',
             metadata: { coupon },
         }).send(res);
     });
@@ -86,7 +98,7 @@ class CouponController {
     grantCouponToUser = asyncHandler(async (req, res) => {
         const userCoupon = await CouponService.grantCouponToUser(req.body);
 
-        new CreatedResponse({
+        new SuccessResponse({
             message: 'Coupon granted to user successfully',
             metadata: { user_coupon: userCoupon },
         }).send(res);

@@ -127,8 +127,6 @@ const couponController = require('../../controllers/coupon.controller');
  *                 type: number
  */
 
-// ===== PUBLIC ROUTES =====
-
 /**
  * @swagger
  * /api/v1/coupons/available:
@@ -171,10 +169,6 @@ const couponController = require('../../controllers/coupon.controller');
  *                     pagination:
  *                       type: object
  */
-router.get('/available', couponController.getAvailableCoupons);
-
-// ===== AUTHENTICATED ROUTES =====
-router.use(authenticationV2);
 
 /**
  * @swagger
@@ -217,7 +211,6 @@ router.use(authenticationV2);
  *       400:
  *         description: Coupon không hợp lệ
  */
-router.post('/validate', couponController.validateCoupon);
 
 /**
  * @swagger
@@ -259,10 +252,6 @@ router.post('/validate', couponController.validateCoupon);
  *                     pagination:
  *                       type: object
  */
-router.get('/my-available', couponController.getMyAvailableCoupons);
-
-// ===== ADMIN ROUTES =====
-router.use(checkRole(['admin']));
 
 /**
  * @swagger
@@ -329,10 +318,6 @@ router.use(checkRole(['admin']));
  *       200:
  *         description: Lấy danh sách coupon thành công
  */
-router
-    .route('/')
-    .post(couponController.createCoupon)
-    .get(couponController.getCoupons);
 
 /**
  * @swagger
@@ -401,11 +386,6 @@ router
  *       200:
  *         description: Xóa coupon thành công
  */
-router
-    .route('/:id')
-    .get(couponController.getCouponById)
-    .put(couponController.updateCoupon)
-    .delete(couponController.deleteCoupon);
 
 /**
  * @swagger
@@ -451,7 +431,6 @@ router
  *       201:
  *         description: Tặng coupon thành công
  */
-router.post('/grant-user', couponController.grantCouponToUser);
 
 /**
  * @swagger
@@ -490,6 +469,35 @@ router.post('/grant-user', couponController.grantCouponToUser);
  *       200:
  *         description: Lấy danh sách coupon của user thành công
  */
+
+// ===== PUBLIC ROUTES =====
+
+router.get('/available', couponController.getAvailableCoupons);
+
+router.use(authenticationV2);
+
+// ===== AUTHENTICATED ROUTES =====
+
+router.post('/validate', couponController.validateCoupon);
+router.get('/my-available', couponController.getMyAvailableCoupons);
 router.get('/user/:user_id', couponController.getUserCoupons);
+
+// ===== ADMIN ROUTES =====
+router.use(checkRole(['admin']));
+
+router
+    .route('/')
+    .post(couponController.createCoupon)
+    .get(couponController.getCoupons);
+
+router.patch('/:id/toggle-status', couponController.toggleCouponStatus);
+
+router.post('/grant-user', couponController.grantCouponToUser);
+
+router
+    .route('/:id')
+    .get(couponController.getCouponById)
+    .put(couponController.updateCoupon)
+    .delete(couponController.deleteCoupon);
 
 module.exports = router;

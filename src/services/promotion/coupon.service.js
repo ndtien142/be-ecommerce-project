@@ -1,10 +1,6 @@
 'use strict';
 
-const {
-    BadRequestError,
-    NotFoundError,
-    ConflictError,
-} = require('../../core/error.response');
+const { BadRequestError, NotFoundError } = require('../../core/error.response');
 const { Op } = require('sequelize');
 const database = require('../../models');
 const { toCamel } = require('../../utils/common.utils');
@@ -16,31 +12,26 @@ class CouponService {
     /**
      * Tạo mã giảm giá mới
      */
-    static async createCoupon(camelData) {
-        // Convert camelCase to snake_case for database
-        const data = toSnake(camelData);
-
-        const {
-            code,
-            name,
-            description,
-            type,
-            value,
-            min_order_amount,
-            max_discount_amount,
-            usage_limit,
-            usage_limit_per_user,
-            start_date,
-            end_date,
-            applicable_products,
-            applicable_categories,
-            excluded_products,
-            excluded_categories,
-            first_order_only,
-            applicable_user_groups,
-            created_by,
-        } = data;
-
+    static async createCoupon({
+        code,
+        name,
+        description,
+        type,
+        value,
+        minOrderAmount,
+        maxOrderAmount,
+        usageLimit,
+        usageLimitPerUser,
+        startDate,
+        endDate,
+        applicableProducts,
+        applicableCategories,
+        excludedProducts = [],
+        excludedCategories = [],
+        firstOrderOnly,
+        applicableUserGroups = [],
+        createdBy,
+    }) {
         // Validate input
         if (!code || !name || !type || (type !== 'free_shipping' && !value)) {
             throw new BadRequestError('Missing required fields');
@@ -66,7 +57,7 @@ class CouponService {
         });
 
         if (existingCoupon) {
-            throw new ConflictError('Coupon code already exists');
+            throw new BadRequestError('Coupon code already exists');
         }
 
         // Set default value for free_shipping type
@@ -79,19 +70,19 @@ class CouponService {
             description,
             type,
             value: couponValue,
-            min_order_amount,
-            max_discount_amount,
-            usage_limit,
-            usage_limit_per_user: usage_limit_per_user || 1,
-            start_date,
-            end_date,
-            applicable_products,
-            applicable_categories,
-            excluded_products,
-            excluded_categories,
-            first_order_only: first_order_only || false,
-            applicable_user_groups,
-            created_by,
+            min_order_amount: minOrderAmount || null,
+            max_discount_amount: maxOrderAmount || null,
+            usage_limit: usageLimit || null,
+            usage_limit_per_user: usageLimitPerUser || 1,
+            start_date: startDate || null,
+            end_date: endDate || null,
+            applicable_products: applicableProducts || null,
+            applicable_categories: applicableCategories || null,
+            excluded_products: excludedProducts || null,
+            excluded_categories: excludedCategories || null,
+            first_order_only: firstOrderOnly || false,
+            applicable_user_groups: applicableUserGroups || null,
+            created_by: createdBy,
         });
 
         return toCamel(coupon.toJSON());
@@ -161,10 +152,10 @@ class CouponService {
 
         return {
             coupons: toCamel(rows.map((row) => row.toJSON())),
-            pagination: {
-                total: count,
-                page: parseInt(page),
-                limit: parseInt(limit),
+            meta: {
+                totalItems: count,
+                currentPage: parseInt(page),
+                itemsPerPage: parseInt(limit),
                 totalPages: Math.ceil(count / limit),
             },
         };
@@ -184,30 +175,124 @@ class CouponService {
     /**
      * Cập nhật coupon
      */
-    static async updateCoupon(id, camelData) {
-        // Convert camelCase to snake_case for database
-        const data = toSnake(camelData);
-
+    static async updateCoupon({
+        id,
+        code,
+        name,
+        description,
+        type,
+        value,
+        minOrderAmount,
+        maxOrderAmount,
+        usageLimit,
+        usageLimitPerUser,
+        startDate,
+        endDate,
+        applicableProducts = [],
+        applicableCategories = [],
+        excludedProducts = [],
+        excludedCategories = [],
+        firstOrderOnly,
+        applicableUserGroups = [],
+        createdBy,
+    }) {
+        // Find coupon
         const coupon = await database.Coupon.findByPk(id);
         if (!coupon) {
             throw new NotFoundError('Coupon not found');
         }
 
-        // Validate code if being updated
-        if (data.code && data.code !== coupon.code) {
+        // Prepare update data
+        const updateData = {};
+
+        // Validate and update code
+        if (code && code !== coupon.code) {
             const existingCoupon = await database.Coupon.findOne({
                 where: {
-                    code: data.code.toUpperCase(),
+                    code: code.toUpperCase(),
                     id: { [Op.ne]: id },
                 },
             });
             if (existingCoupon) {
-                throw new ConflictError('Coupon code already exists');
+                throw new BadRequestError('Coupon code already exists');
             }
-            data.code = data.code.toUpperCase();
+            updateData.code = code.toUpperCase();
         }
 
-        await coupon.update(data);
+        // Validate type
+        if (type && !['percent', 'fixed', 'free_shipping'].includes(type)) {
+            throw new BadRequestError('Invalid discount type');
+        }
+
+        // Validate value
+        if (
+            type === 'percent' ||
+            (type === undefined && coupon.type === 'percent')
+        ) {
+            const percentValue = value !== undefined ? value : coupon.value;
+            if (percentValue < 0 || percentValue > 100) {
+                throw new BadRequestError(
+                    'Percent discount must be between 0 and 100',
+                );
+            }
+        }
+        if (
+            type === 'fixed' ||
+            (type === undefined && coupon.type === 'fixed')
+        ) {
+            const fixedValue = value !== undefined ? value : coupon.value;
+            if (fixedValue < 0) {
+                throw new BadRequestError('Fixed discount must be positive');
+            }
+        }
+
+        // Set fields if provided
+        if (name !== undefined && name !== null) updateData.name = name;
+        if (description !== undefined && description !== null)
+            updateData.description = description;
+        if (type !== undefined && type !== null) updateData.type = type;
+        if (value !== undefined && value !== null)
+            updateData.value = type === 'free_shipping' ? 0 : value;
+        if (minOrderAmount !== undefined && minOrderAmount !== null)
+            updateData.min_order_amount = minOrderAmount;
+        if (maxOrderAmount !== undefined && maxOrderAmount !== null)
+            updateData.max_discount_amount = maxOrderAmount;
+        if (usageLimit !== undefined && usageLimit !== null)
+            updateData.usage_limit = usageLimit;
+        if (usageLimitPerUser !== undefined && usageLimitPerUser !== null)
+            updateData.usage_limit_per_user = usageLimitPerUser;
+        if (startDate !== undefined && startDate !== null)
+            updateData.start_date = startDate;
+        if (endDate !== undefined && endDate !== null)
+            updateData.end_date = endDate;
+        if (applicableProducts !== undefined && applicableProducts !== null)
+            updateData.applicable_products = applicableProducts;
+        if (applicableCategories !== undefined && applicableCategories !== null)
+            updateData.applicable_categories = applicableCategories;
+        if (excludedProducts !== undefined && excludedProducts !== null)
+            updateData.excluded_products = excludedProducts;
+        if (excludedCategories !== undefined && excludedCategories !== null)
+            updateData.excluded_categories = excludedCategories;
+        if (firstOrderOnly !== undefined && firstOrderOnly !== null)
+            updateData.first_order_only = firstOrderOnly;
+        if (applicableUserGroups !== undefined && applicableUserGroups !== null)
+            updateData.applicable_user_groups = applicableUserGroups;
+        if (createdBy !== undefined && createdBy !== null)
+            updateData.created_by = createdBy;
+
+        console.log('Update data:', updateData);
+
+        await coupon.update(updateData);
+        return toCamel(coupon.toJSON());
+    }
+
+    // ===== COUPON STATUS MANAGEMENT =====
+    static async toggleCouponStatus(id, isActive) {
+        const coupon = await database.Coupon.findByPk(id);
+        if (!coupon) {
+            throw new NotFoundError('Coupon not found');
+        }
+        await coupon.update({ is_active: isActive });
         return toCamel(coupon.toJSON());
     }
 
@@ -279,7 +364,7 @@ class CouponService {
         });
 
         if (existingUserCoupon) {
-            throw new ConflictError('User already has this coupon');
+            throw new BadRequestError('User already has this coupon');
         }
 
         // Create user coupon

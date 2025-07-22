@@ -34,7 +34,7 @@ module.exports = (sequelize) => {
         personal_code: {
             type: DataTypes.STRING(50),
             allowNull: true,
-            unique: true,
+            unique: 'personal_code_unique',
             comment: 'Mã cá nhân hóa cho user (VD: WELCOME_USER123)',
         },
         gift_message: {

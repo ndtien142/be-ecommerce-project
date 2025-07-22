@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
         code: {
             type: DataTypes.STRING(50),
             allowNull: false,
-            unique: true,
+            unique: 'coupon_code_unique',
             comment: 'Mã giảm giá (VD: WELCOME50, NEWYEAR2024)',
         },
         name: {
@@ -128,7 +128,7 @@ module.exports = (sequelize) => {
         updatedAt: 'update_time',
         indexes: [
             {
-                unique: true,
+                unique: 'coupon_code_unique',
                 fields: ['code'],
             },
             {
