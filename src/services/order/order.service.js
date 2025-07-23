@@ -5,6 +5,7 @@ const database = require('../../models');
 const { toCamel } = require('../../utils/common.utils');
 const MomoPaymentService = require('../payment/momo.service');
 const EmailService = require('../email/email.service');
+const CouponService = require('../promotion/coupon.service');
 
 class OrderService {
     // Helper method to validate stock availability
@@ -70,6 +71,7 @@ class OrderService {
         trackingNumber = null,
         shippedBy = null,
         orderedDate = new Date(),
+        couponCode = null, // Thêm couponCode vào params
     }) {
         // Validate required fields
         if (!userId) throw new BadRequestError('userId là bắt buộc');
@@ -126,6 +128,34 @@ class OrderService {
                 0,
             ) + Number(shippingFee);
 
+        // Calculate initial subtotal
+        const initialSubtotal = totalAmount - Number(shippingFee);
+
+        // Process coupon discount
+        const order_data = {
+            subtotal: initialSubtotal,
+            shipping_fee: shippingFee,
+            items: beCart.lineItems,
+        };
+
+        const couponDiscount = await OrderService.processCouponDiscount(
+            userId,
+            couponCode,
+            order_data,
+        );
+
+        // Calculate final totals
+        const orderTotals = OrderService.calculateOrderTotals(
+            beCart.lineItems,
+            shippingFee,
+            couponDiscount,
+        );
+
+        console.log('Order totals:', orderTotals);
+        console.log('Coupon discount:', couponDiscount);
+        console.log('Shipping fee:', shippingFee);
+        console.log('Coupon code:', couponCode);
+
         // Validate stock availability before creating order
         await OrderService.validateStockAvailability(beCart.lineItems);
 
@@ -139,7 +169,13 @@ class OrderService {
                     address_id: addressId,
                     payment_id: null, // will update after payment created
                     status: 'pending_confirmation',
-                    total_amount: totalAmount,
+                    subtotal: orderTotals.subtotal,
+                    discount_amount: orderTotals.coupon_discount_amount,
+                    shipping_discount: orderTotals.shipping_discount,
+                    total_amount: orderTotals.total_amount,
+                    coupon_codes: couponDiscount.applied_coupon
+                        ? [couponDiscount.applied_coupon.code]
+                        : null,
                     note,
                     ordered_date: orderedDate,
                     shipping_method_id: shippingMethodId,
@@ -164,6 +200,32 @@ class OrderService {
                 );
             }
 
+            // Create order coupon record if coupon was applied
+            if (couponDiscount.applied_coupon) {
+                console.log('Call applyCouponToOrder:', {
+                    order_id: order.id,
+                    coupon_id: couponDiscount.applied_coupon.id,
+                    user_coupon_id: couponDiscount.user_coupon
+                        ? couponDiscount.user_coupon.id
+                        : null,
+                    order_coupon_data: couponDiscount.order_coupon_data,
+                });
+                try {
+                    await CouponService.applyCouponToOrder(
+                        order.id,
+                        couponDiscount.applied_coupon.id,
+                        couponDiscount.user_coupon
+                            ? couponDiscount.user_coupon.id
+                            : null,
+                        couponDiscount.order_coupon_data,
+                        transaction,
+                    );
+                } catch (err) {
+                    console.error('Error when applyCouponToOrder:', err);
+                    throw err;
+                }
+            }
+
             // Update product stock and sold count
             await OrderService.updateProductStock(
                 beCart.lineItems,
@@ -174,7 +236,7 @@ class OrderService {
             const payment = await database.Payment.create(
                 {
                     order_id: order.id,
-                    amount: totalAmount,
+                    amount: orderTotals.total_amount,
                     status: 'pending',
                 },
                 { transaction },
@@ -231,6 +293,95 @@ class OrderService {
             }
             throw err;
         }
+    }
+
+    // Helper method to process coupon discount
+    static async processCouponDiscount(user_id, coupon_code, order_data) {
+        if (!coupon_code) {
+            return {
+                discount_amount: 0,
+                shipping_discount: 0,
+                applied_coupon: null,
+                order_coupon_data: null,
+            };
+        }
+
+        // Validate coupon
+        const coupon = await CouponService.validateCoupon(
+            coupon_code,
+            user_id,
+            order_data,
+        );
+
+        // Calculate discount
+        const discount = CouponService.calculateDiscount(coupon, order_data);
+
+        // Check if user has this coupon (for personal vouchers)
+        const userCoupon = await database.UserCoupon.findOne({
+            where: {
+                user_id,
+                coupon_id: coupon.id,
+                is_active: true,
+            },
+        });
+
+        // Prepare order coupon data
+        const orderCouponData = {
+            coupon_code: coupon.code,
+            discount_type: coupon.type,
+            discount_value: coupon.value,
+            discount_amount: discount.discountAmount,
+            order_subtotal: order_data.subtotal,
+            shipping_fee: order_data.shipping_fee,
+            shipping_discount: discount.shippingDiscount,
+            applied_products: order_data.items.map((item) => ({
+                product_id: item.product_id,
+                quantity: item.quantity,
+                price: item.price,
+            })),
+            conditions_met: {
+                min_order_amount: coupon.min_order_amount,
+                applicable_products: coupon.applicable_products,
+                applicable_categories: coupon.applicable_categories,
+            },
+        };
+
+        return {
+            discount_amount: discount.discountAmount,
+            shipping_discount: discount.shippingDiscount,
+            applied_coupon: coupon,
+            user_coupon: userCoupon,
+            order_coupon_data: orderCouponData,
+        };
+    }
+
+    // Helper method to calculate order totals
+    static calculateOrderTotals(
+        items_with_prices,
+        shipping_fee,
+        coupon_discount,
+    ) {
+        const subtotal = items_with_prices.reduce(
+            (sum, item) => sum + Number(item.total),
+            0,
+        );
+        const coupon_discount_amount = coupon_discount.discount_amount || 0;
+        const shipping_discount = coupon_discount.shipping_discount || 0;
+
+        const final_shipping_fee = Math.max(
+            0,
+            shipping_fee - shipping_discount,
+        );
+        const total_amount =
+            subtotal - coupon_discount_amount + final_shipping_fee;
+
+        return {
+            subtotal,
+            coupon_discount_amount,
+            shipping_discount,
+            final_shipping_fee,
+            total_amount,
+        };
     }
 
     static async getOrderById(id) {
@@ -459,7 +610,11 @@ class OrderService {
         shippingFee = 0,
         orderInfo = 'Thanh toán đơn hàng',
         extraData = '',
+        couponCode = null,
     }) {
+        console.log('Creating order with MoMo payment...');
+        console.log('userId:', userId);
+        console.log('couponCode:', couponCode);
         // Validate required fields
         if (!userId) throw new BadRequestError('userId là bắt buộc');
         if (
@@ -514,6 +669,29 @@ class OrderService {
                 0,
             ) + Number(shippingFee);
 
+        // Calculate initial subtotal
+        const initialSubtotal = totalAmount - Number(shippingFee);
+
+        // Process coupon discount
+        const order_data = {
+            subtotal: initialSubtotal,
+            shipping_fee: shippingFee,
+            items: beCart.lineItems,
+        };
+
+        const couponDiscount = await OrderService.processCouponDiscount(
+            userId,
+            couponCode,
+            order_data,
+        );
+
+        // Calculate final totals
+        const orderTotals = OrderService.calculateOrderTotals(
+            beCart.lineItems,
+            shippingFee,
+            couponDiscount,
+        );
+
         // Validate stock availability before creating order
         await OrderService.validateStockAvailability(beCart.lineItems);
 
@@ -528,6 +706,7 @@ class OrderService {
 
             beCart.status = 'ordered';
             await beCart.save({ transaction });
+
             // Create order
             const order = await database.Order.create(
                 {
@@ -535,16 +714,22 @@ class OrderService {
                     address_id: addressId,
                     payment_id: null,
                     status: 'pending_confirmation',
-                    total_amount: totalAmount,
+                    subtotal: orderTotals.subtotal,
+                    discount_amount: orderTotals.coupon_discount_amount,
+                    shipping_discount: orderTotals.shipping_discount,
+                    total_amount: orderTotals.total_amount,
+                    coupon_codes: couponDiscount.applied_coupon
+                        ? [couponDiscount.applied_coupon.code]
+                        : null,
                     note,
                     ordered_date: new Date(),
                     shipping_method_id: shippingMethodId,
-                    shipping_fee: shippingFee,
+                    shipping_fee: orderTotals.final_shipping_fee,
                 },
                 { transaction },
             );
 
-            // Create order line items (but don't update stock yet - wait for payment)
+            // Create order line items
             for (const item of beCart.lineItems) {
                 await database.OrderLineItem.create(
                     {
@@ -558,6 +743,32 @@ class OrderService {
                 );
             }
 
+            // Create order coupon record if coupon was applied
+            if (couponDiscount.applied_coupon) {
+                console.log('Call applyCouponToOrder:', {
+                    order_id: order.id,
+                    coupon_id: couponDiscount.applied_coupon.id,
+                    user_coupon_id: couponDiscount.user_coupon
+                        ? couponDiscount.user_coupon.id
+                        : null,
+                    order_coupon_data: couponDiscount.order_coupon_data,
+                });
+                try {
+                    await CouponService.applyCouponToOrder(
+                        order.id,
+                        couponDiscount.applied_coupon.id,
+                        couponDiscount.user_coupon
+                            ? couponDiscount.user_coupon.id
+                            : null,
+                        couponDiscount.order_coupon_data,
+                        transaction,
+                    );
+                } catch (err) {
+                    console.error('Error when applyCouponToOrder:', err);
+                    throw err;
+                }
+            }
+
             await order.save({ transaction });
 
             // Create MoMo payment first, before committing transaction
@@ -567,7 +778,7 @@ class OrderService {
             const momoPayment = await MomoPaymentService.createPayment({
                 orderId: order.id,
                 momoOrderId: momoOrderId,
-                amount: Math.round(totalAmount), // MoMo requires integer amount
+                amount: Math.round(orderTotals.total_amount), // MoMo requires integer amount
                 orderInfo: orderInfo,
                 extraData: extraData,
                 internalOrderId: order.id.toString(), // Pass internal order ID for mapping

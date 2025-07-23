@@ -186,15 +186,12 @@ class CategoriesService {
 
         const roots = [];
         items.forEach((cat) => {
-            console.log(items);
             if (cat.parentId && map[cat.parentId]) {
                 map[cat.parentId].children.push(cat);
             } else {
                 roots.push(cat);
             }
         });
-        console.log(roots);
-
         return roots;
     }
 

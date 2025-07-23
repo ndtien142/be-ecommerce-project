@@ -26,8 +26,6 @@ class ProductService {
         inventoryType,
         productType,
         flag,
-        tags = [],
-        meta = [],
     }) {
         // Extract brandId from brand object if not provided
         if (
@@ -150,25 +148,6 @@ class ProductService {
             ) {
                 await product.setCategories(categories, { transaction });
             }
-            // Set tags if provided
-            if (Array.isArray(tags) && tags.length > 0 && product.setTags) {
-                await product.setTags(tags, { transaction });
-            }
-            // Create meta data if provided
-            if (
-                Array.isArray(meta) &&
-                meta.length > 0 &&
-                database.ProductMeta
-            ) {
-                const metaList = meta.map(({ metaKey, metaValue }) => ({
-                    product_id: product.id,
-                    meta_key: metaKey,
-                    meta_value: metaValue,
-                }));
-                await database.ProductMeta.bulkCreate(metaList, {
-                    transaction,
-                });
-            }
             // Create images if provided
             if (imageRecords.length > 0 && database.ProductImage) {
                 const imagesToCreate = imageRecords.map((img) => ({
@@ -187,8 +166,6 @@ class ProductService {
                     include: [
                         { model: database.Brand, as: 'brand' },
                         { model: database.ProductImage, as: 'images' },
-                        { model: database.ProductMeta, as: 'meta' },
-                        { model: database.Tag, as: 'tags' },
                     ],
                 }).then((p) => p && p.toJSON()),
             );
@@ -204,8 +181,6 @@ class ProductService {
                 { model: database.Brand, as: 'brand' },
                 { model: database.ProductImage, as: 'images' },
                 { model: database.Category, as: 'categories' },
-                { model: database.ProductMeta, as: 'meta' },
-                { model: database.Tag, as: 'tags' },
             ],
         });
         if (!product) throw new NotFoundError('Product not found');
@@ -275,8 +250,6 @@ class ProductService {
                 { model: database.Brand, as: 'brand' },
                 { model: database.ProductImage, as: 'images' },
                 { model: database.Category, as: 'categories' },
-                { model: database.ProductMeta, as: 'meta' },
-                { model: database.Tag, as: 'tags' },
             ],
             where: {},
             order: [[sortBy, sortOrder.toUpperCase()]],
@@ -384,7 +357,7 @@ class ProductService {
 
         // Fix duplicate count issue with many-to-many joins
         // Use separate queries for count and data to avoid pagination issues
-        
+
         // Create count query (without limit/offset)
         const countOptions = { ...queryOptions };
         delete countOptions.limit;
@@ -392,18 +365,18 @@ class ProductService {
         delete countOptions.order;
         countOptions.distinct = true;
         countOptions.subQuery = false;
-        
+
         // Create data query (with limit/offset but no distinct to avoid pagination issues)
         const dataOptions = { ...queryOptions };
         dataOptions.distinct = false;
         dataOptions.subQuery = true;
-        
+
         // Execute both queries
         const [countResult, dataResult] = await Promise.all([
             database.Product.count(countOptions),
-            database.Product.findAll(dataOptions)
+            database.Product.findAll(dataOptions),
         ]);
-        
+
         const totalItems = countResult;
         const totalPages = Math.ceil(totalItems / limit);
 
@@ -477,24 +450,6 @@ class ProductService {
         });
         if (!affectedRows)
             throw new NotFoundError('Product not found or not updated');
-        // Optionally update meta
-        if (Array.isArray(updateData.meta) && database.ProductMeta) {
-            // Remove old meta and insert new
-            await database.ProductMeta.destroy({ where: { product_id: id } });
-            const metaList = updateData.meta.map(({ metaKey, metaValue }) => ({
-                product_id: id,
-                meta_key: metaKey,
-                meta_value: metaValue,
-            }));
-            await database.ProductMeta.bulkCreate(metaList);
-        }
-        // Optionally update tags
-        if (Array.isArray(updateData.tags)) {
-            const product = await database.Product.findByPk(id);
-            if (product && product.setTags) {
-                await product.setTags(updateData.tags);
-            }
-        }
 
         // Optionally update images
         if (Array.isArray(updateData.images) && database.ProductImage) {
@@ -555,13 +510,7 @@ class ProductService {
     }
 
     static async deleteProduct(id) {
-        if (database.ProductMeta) {
-            await database.ProductMeta.destroy({ where: { product_id: id } });
-        }
         const product = await database.Product.findByPk(id);
-        if (product && product.setTags) {
-            await product.setTags([]);
-        }
         const deleted = await database.Product.destroy({ where: { id } });
         if (!deleted)
             throw new NotFoundError('Product not found or already deleted');
@@ -575,8 +524,6 @@ class ProductService {
                 { model: database.Brand, as: 'brand' },
                 { model: database.ProductImage, as: 'images' },
                 { model: database.Category, as: 'categories' },
-                { model: database.ProductMeta, as: 'meta' },
-                { model: database.Tag, as: 'tags' },
             ],
         });
         if (!product) throw new NotFoundError('Product not found');

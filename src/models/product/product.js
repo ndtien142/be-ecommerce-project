@@ -58,6 +58,11 @@ module.exports = (sequelize) => {
             allowNull: false,
             defaultValue: 'none',
         },
+        is_sale: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false,
+        },
         stock: {
             type: DataTypes.INTEGER,
             allowNull: false,

@@ -142,7 +142,7 @@ router.use(authenticationV2);
  */
 router.get(
     '/workflow/statistics',
-    checkRole('admin'),
+    checkRole(['admin']),
     DashboardController.getWorkflowStatistics,
 );
 
@@ -302,7 +302,7 @@ router.get(
  */
 router.get(
     '/workflow/overview',
-    checkRole('admin'),
+    checkRole(['admin']),
     DashboardController.getDashboardOverview,
 );
 
@@ -410,7 +410,7 @@ router.get(
 router.get(
     '/workflow/timeseries',
 
-    checkRole('admin'),
+    checkRole(['admin']),
     DashboardController.getTimeSeriesData,
 );
 
@@ -502,7 +502,7 @@ router.get(
  */
 router.get(
     '/workflow/realtime',
-    checkRole('admin'),
+    checkRole(['admin']),
     DashboardController.getRealtimeMetrics,
 );
 
@@ -537,7 +537,7 @@ router.get(
  */
 router.delete(
     '/workflow/cache',
-    checkRole('admin'),
+    checkRole(['admin']),
     DashboardController.clearCache,
 );
 
