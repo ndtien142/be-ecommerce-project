@@ -458,7 +458,6 @@ class CouponService {
             },
         };
     }
-
     // ===== COUPON VALIDATION & APPLICATION =====
 
     /**

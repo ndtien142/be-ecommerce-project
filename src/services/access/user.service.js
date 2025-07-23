@@ -17,12 +17,12 @@ class UserService {
         phoneNumber,
         address,
     }) {
-        const transaction = await database.Account.sequelize.transaction();
+        const transaction = await database.User.sequelize.transaction();
 
         try {
             const role = await database.Role.findByPk(roleId);
 
-            const existingAccount = await database.Account.findOne({
+            const existingAccount = await database.User.findOne({
                 where: { username },
             });
             if (existingAccount) {
@@ -33,7 +33,7 @@ class UserService {
             // Step 2: hashing password
             const passwordHash = await bcrypt.hash(password, 10);
 
-            const newAccount = await database.Account.create(
+            const newAccount = await database.User.create(
                 {
                     user_code: generateuserId(),
                     username,
@@ -94,9 +94,9 @@ class UserService {
         phoneNumber,
         address,
     }) {
-        const transaction = await database.Account.sequelize.transaction();
+        const transaction = await database.User.sequelize.transaction();
         try {
-            const account = await database.Account.findByPk(userId);
+            const account = await database.User.findByPk(userId);
             if (!account) {
                 throw new BadRequestError('Không tìm thấy người dùng');
             }
@@ -131,7 +131,7 @@ class UserService {
     }
 
     static async markUserAsDeleted(userId) {
-        const account = await database.Account.findByPk(userId);
+        const account = await database.User.findByPk(userId);
         if (!account) {
             throw new Error('Không tìm thấy người dùng');
         }
@@ -145,7 +145,7 @@ class UserService {
     }
 
     static async markUserAsBlocked(userId, isBlock) {
-        const account = await database.Account.findByPk(userId);
+        const account = await database.User.findByPk(userId);
         if (!account) {
             throw new Error('Không tìm thấy người dùng');
         }
@@ -159,7 +159,7 @@ class UserService {
     }
 
     static async getUser(userId) {
-        const account = await database.Account.findByPk(userId, {
+        const account = await database.User.findByPk(userId, {
             include: [
                 {
                     model: database.Profile,
@@ -203,50 +203,74 @@ class UserService {
     static async getUsers({
         page = 1,
         limit = 20,
-        isActive = true,
-        isBlock = false,
+        roleName = '',
+        search = '',
+        status = 'normal',
     }) {
         const offset = (parseInt(page) - 1) * parseInt(limit);
-        const { rows: accounts, count } =
-            await database.Account.findAndCountAll({
-                offset,
-                limit: parseInt(limit),
-                include: [
-                    {
-                        model: database.Profile,
-                        as: 'profile',
+        const where = {
+            user_status: status,
+        };
+        if (roleName) {
+            where['$role.name$'] = roleName;
+        }
+        if (search) {
+            where[database.Sequelize.Op.or] = [
+                {
+                    user_login: {
+                        [database.Sequelize.Op.like]: `%${search}%`,
                     },
-                    {
-                        model: database.Role,
-                        as: 'role',
+                },
+                {
+                    user_email: {
+                        [database.Sequelize.Op.like]: `%${search}%`,
                     },
-                ],
-                order: [['create_time', 'DESC']],
-            });
+                },
+            ];
+        }
+
+        const { rows: accounts, count } = await database.User.findAndCountAll({
+            offset,
+            where,
+            limit: parseInt(limit),
+            include: [
+                {
+                    model: database.Profile,
+                    as: 'profile',
+                },
+                {
+                    model: database.Role,
+                    as: 'role',
+                },
+            ],
+            order: [['create_time', 'DESC']],
+        });
 
         return toCamel({
             items: accounts.map((account) => {
                 return {
                     userId: account.user_code,
-                    username: account.username,
+                    username: account.user_login,
+                    email: account.user_email,
                     isActive: account.is_active,
                     isBlock: account.is_block,
+                    isVerified: account.email_verified,
                     role: {
                         id: account.role.id,
-                        name: account.role.role_name,
+                        name: account.role.name,
+                        description: account.role.description,
                     },
-                    profiles:
-                        account.profile.map((item) => {
-                            return {
-                                id: item.id,
-                                firstName: item.first_name,
-                                lastName: item.last_name,
-                                phoneNumber: item.phone_number,
-                                avatarUrl: item.avatar_url,
-                                address: item.address,
-                                create_time: item.create_time,
-                            };
-                        }) || [],
+                    profile: account?.profile
+                        ? {
+                              id: account.profile.id,
+                              firstName: account.profile.first_name,
+                              lastName: account.profile.last_name,
+                              phoneNumber: account.profile.phone_number,
+                              address: account.profile.address,
+                              avatarUrl: account.profile.avatar_url,
+                              createTime: account.profile.create_time,
+                          }
+                        : null,
                 };
             }),
             meta: {
