@@ -21,6 +21,8 @@ const {
 } = require('../../models/repo/keyToken.repo');
 const database = require('../../models');
 const emailService = require('../email/email.service');
+const AccountService = require('./account.service');
+const { toCamel } = require('../../utils/caseConverter');
 
 class AccessService {
     static logout = async ({ userId }) => {
@@ -40,7 +42,22 @@ class AccessService {
             where: { user_login: username },
             include: [{ model: database.Role, as: 'role' }],
         });
+
         if (!foundAccount) throw new BadRequestError('Username not registered');
+
+        const profile = await database.Profile.findOne({
+            where: { user_id: foundAccount.id },
+            include: [
+                {
+                    model: database.User,
+                    as: 'user',
+                    attributes: ['user_nickname', 'user_date_of_birth'],
+                },
+            ],
+        });
+
+        console.log({ profile });
+
         // 2
         const matchPassword = await bcrypt.compare(
             password,
@@ -102,6 +119,20 @@ class AccessService {
                     name: foundAccount.role.name,
                     description: foundAccount.role.description,
                 },
+                profile: profile
+                    ? {
+                          ...getInfoData({
+                              fields: ['first_name', 'avatar_url', 'last_name'],
+                              object: profile,
+                          }),
+                          nickname: profile.user
+                              ? profile.user.user_nickname
+                              : null,
+                          dateOfBirth: profile.user
+                              ? profile.user.user_date_of_birth
+                              : null,
+                      }
+                    : null,
             },
         };
     };
@@ -361,10 +392,6 @@ class AccessService {
 
         if (keyStore.refreshToken !== refreshToken)
             throw new AuthFailureError('Shop not registed');
-
-        //     const foundShop = await findByEmail(email);
-        // console.log({foundShop});
-        // if(!foundShop) throw new AuthFailureError("Shop not registed");
 
         // create 1 cap moi
         const tokens = await createTokenPair(
