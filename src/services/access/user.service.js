@@ -249,7 +249,7 @@ class UserService {
         return toCamel({
             items: accounts.map((account) => {
                 return {
-                    userId: account.user_code,
+                    userId: account.id,
                     username: account.user_login,
                     email: account.user_email,
                     isActive: account.is_active,
