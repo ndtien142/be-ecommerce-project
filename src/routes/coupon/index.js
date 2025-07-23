@@ -480,6 +480,7 @@ router.use(authenticationV2);
 
 router.post('/validate', couponController.validateCoupon);
 router.get('/my-available', couponController.getMyAvailableCoupons);
+router.get('/available-system', couponController.getAvailableSystemCoupon);
 router.get('/user/:user_id', couponController.getUserCoupons);
 
 // ===== ADMIN ROUTES =====

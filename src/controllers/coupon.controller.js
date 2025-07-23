@@ -5,6 +5,7 @@ const { SuccessResponse } = require('../core/success.response');
 const { BadRequestError } = require('../core/error.response');
 const { asyncHandler } = require('../helpers/asyncHandler');
 const CouponService = require('../services/promotion/coupon.service');
+const { toCamel } = require('../utils/common.utils');
 
 class CouponController {
     // ===== ADMIN COUPON MANAGEMENT =====
@@ -141,6 +142,27 @@ class CouponController {
         }).send(res);
     });
 
+    /**
+     * Lấy danh sách coupon hệ thống hợp lệ cho user
+     */
+    getAvailableSystemCoupon = asyncHandler(async (req, res) => {
+        if (!req.user || !req.user.userId) {
+            throw new BadRequestError('User authentication required');
+        }
+        const result = await CouponService.getAvailableSystemCoupon(
+            req.user.userId,
+            {
+                ...req.query,
+                is_available_only: true,
+                cartId: req.query.cartId, // Optional cart ID for context
+            },
+        );
+        new SuccessResponse({
+            message: 'Get available system coupons successfully',
+            metadata: result,
+        }).send(res);
+    });
+
     // ===== COUPON VALIDATION =====
 
     /**
@@ -164,13 +186,7 @@ class CouponController {
         new SuccessResponse({
             message: 'Coupon is valid',
             metadata: {
-                coupon: {
-                    id: coupon.id,
-                    code: coupon.code,
-                    name: coupon.name,
-                    type: coupon.type,
-                    value: coupon.value,
-                },
+                coupon: toCamel(coupon),
                 discount,
             },
         }).send(res);
