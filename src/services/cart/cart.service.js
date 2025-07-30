@@ -3,7 +3,7 @@
 const { BadRequestError, NotFoundError } = require('../../core/error.response');
 const { toCamel } = require('../../utils/common.utils');
 const database = require('../../models');
-const CartRepository = require('../../repositories/categories/cart.repo');
+const CartRepository = require('../../repositories/cart.repo');
 const {
     createCartSchema,
     addToCartSchema,

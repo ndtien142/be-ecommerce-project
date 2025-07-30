@@ -4,6 +4,7 @@ const express = require('express');
 const cartController = require('../../controllers/cart.controller');
 const { asyncHandler } = require('../../helpers/asyncHandler');
 const { authenticationV2 } = require('../../auth/authUtils');
+const checkRole = require('../../middleware/checkRole');
 const router = express.Router();
 
 /**
@@ -307,6 +308,7 @@ const router = express.Router();
  */
 
 router.use(authenticationV2);
+router.use(checkRole(['customer', 'user']));
 
 router.post('/', asyncHandler(cartController.createCart));
 // router.get('/:id', asyncHandler(cartController.getCartById));
