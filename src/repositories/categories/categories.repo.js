@@ -1,14 +1,16 @@
 'use strict';
 
+const database = require('../../models');
+
 const getCategoryAndChildrenIds = async (categorySlug) => {
-    const selectedCategory = await Category.findOne({
+    const selectedCategory = await database.Category.findOne({
         where: { slug: categorySlug, status: 'active' },
     });
 
     if (!selectedCategory) return { selectedCategory: null, categoryIds: [] };
 
     async function getChildIds(parentId) {
-        const children = await Category.findAll({
+        const children = await database.Category.findAll({
             where: { parent_id: parentId, status: 'active' },
             attributes: ['id'],
         });

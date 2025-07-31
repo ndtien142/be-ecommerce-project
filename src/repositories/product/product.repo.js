@@ -213,6 +213,19 @@ const deleteProductById = async (productId, transaction) => {
     });
 };
 
+const findProductsByIdsWithCategories = async (productIds, options = {}) => {
+    return await database.Product.findAll({
+        where: { id: { [Sequelize.Op.in]: productIds } },
+        include: [
+            {
+                model: database.Category,
+                as: 'categories',
+            },
+        ],
+        ...options,
+    });
+};
+
 module.exports = {
     getProductById,
     getAllProductsRepo,
@@ -221,4 +234,5 @@ module.exports = {
     getProductBySlugRepo,
     deleteImagesByProductId,
     deleteProductById,
+    findProductsByIdsWithCategories,
 };

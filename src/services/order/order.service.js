@@ -6,12 +6,14 @@ const { toCamel } = require('../../utils/common.utils');
 const MomoPaymentService = require('../payment/momo.service');
 const EmailService = require('../email/email.service');
 const CouponService = require('../promotion/coupon.service');
+const CartService = require('../cart/cart.service');
+const { getProductById } = require('../../repositories/product/product.repo');
 
 class OrderService {
     // Helper method to validate stock availability
     static async validateStockAvailability(cartItems) {
         for (const item of cartItems) {
-            const product = await database.Product.findByPk(item.product_id);
+            const product = await getProductById(item.product_id);
             if (!product) {
                 throw new NotFoundError(
                     `Không tìm thấy sản phẩm có ID: ${item.product_id}`,
@@ -38,7 +40,7 @@ class OrderService {
     // Helper method to update product stock and sold count
     static async updateProductStock(cartItems, transaction) {
         for (const item of cartItems) {
-            const product = await database.Product.findByPk(item.product_id, {
+            const product = await database.Product.findByPk(item.productId, {
                 transaction,
             });
 
@@ -68,32 +70,32 @@ class OrderService {
         shippingMethodId,
         note,
         shippingFee = 0,
-        trackingNumber = null,
-        shippedBy = null,
         orderedDate = new Date(),
-        couponCode = null, // Thêm couponCode vào params
+        couponCode = null,
     }) {
         // Validate required fields
-        if (!userId) throw new BadRequestError('userId là bắt buộc');
+        if (!userId) throw new BadRequestError('Người dùng là không hợp lệ');
         if (
             !cart ||
             !Array.isArray(cart.lineItems) ||
             cart.lineItems.length === 0
         )
-            throw new BadRequestError('cart với lineItems là bắt buộc');
-        if (!addressId) throw new BadRequestError('addressId là bắt buộc');
+            throw new BadRequestError('Thiếu thông tin giỏ hàng');
+        if (!addressId) throw new BadRequestError('Không tìm thấy địa chỉ');
 
         if (!shippingMethodId)
-            throw new BadRequestError('shippingMethodId là bắt buộc');
+            throw new BadRequestError('Phương thức vận chuyển là bắt buộc');
 
         // Fetch active cart from BE and compare with FE cart
         const beCart = await database.Cart.findOne({
             where: { id: cart.id, user_id: userId, status: 'active' },
             include: [{ model: database.CartLineItem, as: 'lineItems' }],
         });
-        if (!beCart) throw new NotFoundError('Active cart not found');
 
-        // Compare FE cart.lineItems with BE cart.lineItems
+        if (!beCart)
+            throw new NotFoundError('Không tìm thấy giỏ hàng hoạt động');
+
+        // So sánh giỏ hàng FE với giỏ hàng BE
         const feItems = cart.lineItems.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
@@ -132,16 +134,16 @@ class OrderService {
         const initialSubtotal = totalAmount - Number(shippingFee);
 
         // Process coupon discount
-        const order_data = {
+        const orderData = {
             subtotal: initialSubtotal,
-            shipping_fee: shippingFee,
+            shippingFee: shippingFee,
             items: beCart.lineItems,
         };
 
         const couponDiscount = await OrderService.processCouponDiscount(
             userId,
             couponCode,
-            order_data,
+            orderData,
         );
 
         // Calculate final totals
@@ -150,11 +152,6 @@ class OrderService {
             shippingFee,
             couponDiscount,
         );
-
-        console.log('Order totals:', orderTotals);
-        console.log('Coupon discount:', couponDiscount);
-        console.log('Shipping fee:', shippingFee);
-        console.log('Coupon code:', couponCode);
 
         // Validate stock availability before creating order
         await OrderService.validateStockAvailability(beCart.lineItems);
@@ -173,15 +170,13 @@ class OrderService {
                     discount_amount: orderTotals.coupon_discount_amount,
                     shipping_discount: orderTotals.shipping_discount,
                     total_amount: orderTotals.total_amount,
-                    coupon_codes: couponDiscount.applied_coupon
-                        ? [couponDiscount.applied_coupon.code]
+                    coupon_codes: couponDiscount.appliedCoupon
+                        ? [couponDiscount.appliedCoupon.code]
                         : null,
                     note,
                     ordered_date: orderedDate,
                     shipping_method_id: shippingMethodId,
                     shipping_fee: shippingFee,
-                    tracking_number: trackingNumber,
-                    shipped_by: shippedBy,
                 },
                 { transaction },
             );
@@ -201,25 +196,16 @@ class OrderService {
             }
 
             // Create order coupon record if coupon was applied
-            if (couponDiscount.applied_coupon) {
-                console.log('Call applyCouponToOrder:', {
-                    order_id: order.id,
-                    coupon_id: couponDiscount.applied_coupon.id,
-                    user_coupon_id: couponDiscount.user_coupon
-                        ? couponDiscount.user_coupon.id
-                        : null,
-                    order_coupon_data: couponDiscount.order_coupon_data,
-                });
+            if (couponDiscount.appliedCoupon) {
                 try {
                     await CouponService.applyCouponToOrder(
                         order.id,
-                        couponDiscount.applied_coupon.id,
-                        couponDiscount.user_coupon
-                            ? couponDiscount.user_coupon.id
-                            : null,
-                        couponDiscount.order_coupon_data,
+                        couponDiscount.appliedCoupon.id,
+                        couponDiscount.orderCouponData,
                         transaction,
                     );
+                    order.total_amount =
+                        order.total_amount - couponDiscount.discountAmount;
                 } catch (err) {
                     console.error('Error when applyCouponToOrder:', err);
                     throw err;
@@ -296,62 +282,52 @@ class OrderService {
     }
 
     // Helper method to process coupon discount
-    static async processCouponDiscount(user_id, coupon_code, order_data) {
-        if (!coupon_code) {
+    static async processCouponDiscount(userId, couponCode, orderData) {
+        if (!couponCode) {
             return {
-                discount_amount: 0,
-                shipping_discount: 0,
-                applied_coupon: null,
-                order_coupon_data: null,
+                discountAmount: 0,
+                shippingDiscount: 0,
+                appliedCoupon: null,
+                orderCouponData: null,
             };
         }
 
         // Validate coupon
         const coupon = await CouponService.validateCoupon(
-            coupon_code,
-            user_id,
-            order_data,
+            couponCode,
+            userId,
+            orderData,
         );
 
         // Calculate discount
-        const discount = CouponService.calculateDiscount(coupon, order_data);
-
-        // Check if user has this coupon (for personal vouchers)
-        const userCoupon = await database.UserCoupon.findOne({
-            where: {
-                user_id,
-                coupon_id: coupon.id,
-                is_active: true,
-            },
-        });
+        const discount = CouponService.calculateDiscount(coupon, orderData);
 
         // Prepare order coupon data
         const orderCouponData = {
-            coupon_code: coupon.code,
-            discount_type: coupon.type,
-            discount_value: coupon.value,
-            discount_amount: discount.discountAmount,
-            order_subtotal: order_data.subtotal,
-            shipping_fee: order_data.shipping_fee,
-            shipping_discount: discount.shippingDiscount,
-            applied_products: order_data.items.map((item) => ({
-                product_id: item.product_id,
+            couponCode: coupon.code,
+            discountType: coupon.type,
+            discountValue: coupon.value,
+            discountAmount: discount.discountAmount,
+            orderSubtotal: orderData.subtotal,
+            shippingFee: orderData.shippingFee,
+            shippingDiscount: discount.shippingDiscount,
+            appliedProducts: orderData.items.map((item) => ({
+                productId: item.product_id,
                 quantity: item.quantity,
                 price: item.price,
             })),
-            conditions_met: {
-                min_order_amount: coupon.min_order_amount,
-                applicable_products: coupon.applicable_products,
-                applicable_categories: coupon.applicable_categories,
+            conditionsMet: {
+                minOrderAmount: coupon.minOrderAmount,
+                applicableProducts: coupon.applicableProducts,
+                applicableCategories: coupon.applicableCategories,
             },
         };
 
         return {
-            discount_amount: discount.discountAmount,
-            shipping_discount: discount.shippingDiscount,
-            applied_coupon: coupon,
-            user_coupon: userCoupon,
-            order_coupon_data: orderCouponData,
+            discountAmount: discount.discountAmount,
+            shippingDiscount: discount.shippingDiscount,
+            appliedCoupon: coupon,
+            orderCouponData: orderCouponData,
         };
     }
 
