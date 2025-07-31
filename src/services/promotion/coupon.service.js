@@ -13,6 +13,7 @@ const CouponRepo = require('../../repositories/coupon/coupon.repo');
 const OrderCouponRepo = require('../../repositories/coupon/order-coupon.repo');
 const ProductRepo = require('../../repositories/product/product.repo');
 const CartService = require('../cart/cart.service');
+const database = require('../../models');
 
 class CouponService {
     // ===== COUPON MANAGEMENT =====
@@ -135,7 +136,9 @@ class CouponService {
         const coupon = await CouponRepo.findById(id);
         if (!coupon) throw new NotFoundError('Không tìm thấy mã giảm giá');
 
-        const usageCount = await OrderCouponRepo.count({ coupon_id: id });
+        const usageCount = await OrderCouponRepo.count({
+            where: { coupon_id: id },
+        });
         if (usageCount > 0)
             throw new BadRequestError(
                 'Không thể xóa mã giảm giá đã được sử dụng',
@@ -180,6 +183,27 @@ class CouponService {
 
         const validCoupons = [];
         for (const coupon of coupons) {
+            // Kiểm tra usage_limit_per_user
+            let userUsageCount = 0;
+            // Nếu coupon
+            if (coupon.usage_limit_per_user && foundCartActive.userId) {
+                userUsageCount = await OrderCouponRepo.count({
+                    where: {
+                        coupon_id: coupon.id,
+                    },
+                    include: [
+                        {
+                            model: database.Order,
+                            as: 'order',
+                            where: { user_id: foundCartActive.userId },
+                        },
+                    ],
+                });
+                // Nếu user đã dùng quá số lần cho phép
+                if (userUsageCount >= coupon.usage_limit_per_user) {
+                    continue; // Bỏ qua coupon này nếu user đã dùng quá số lần cho phép
+                }
+            }
             const ok = await this.isCouponValidForCart(
                 coupon,
                 {
@@ -251,7 +275,16 @@ class CouponService {
         // User limitation
         if (user_id) {
             const userCouponUsage = await OrderCouponRepo.count({
-                coupon_id: coupon.id,
+                where: {
+                    coupon_id: coupon.id,
+                },
+                include: [
+                    {
+                        model: database.Order,
+                        as: 'order',
+                        where: { user_id: user_id },
+                    },
+                ],
             });
             if (
                 coupon.usage_limit_per_user &&
