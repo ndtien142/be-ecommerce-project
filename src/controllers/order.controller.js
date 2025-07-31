@@ -8,7 +8,11 @@ class OrderController {
         const userId = req.user?.userId || req.headers['x-user-id'];
         new CREATED({
             message: 'Tạo đơn hàng thành công',
-            metadata: await OrderService.createOrder({ ...req.body, userId }),
+            metadata: await OrderService.createOrderUnified({
+                ...req.body,
+                userId,
+                paymentMethod: req.body.paymentMethod || 'cod',
+            }),
         }).send(res);
     };
 
@@ -79,9 +83,10 @@ class OrderController {
         const userId = req.user?.userId || req.headers['x-user-id'];
         new CREATED({
             message: 'Tạo đơn hàng với thanh toán MoMo thành công',
-            metadata: await OrderService.createOrderWithMoMo({
+            metadata: await OrderService.createOrderUnified({
                 ...req.body,
                 userId,
+                paymentMethod: 'momo',
             }),
         }).send(res);
     };

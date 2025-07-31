@@ -2,653 +2,323 @@
 
 const { BadRequestError, NotFoundError } = require('../../core/error.response');
 const { Op } = require('sequelize');
-const database = require('../../models');
 const { toCamel } = require('../../utils/common.utils');
 const { toSnake } = require('../../utils/caseConverter');
+const {
+    createCouponSchema,
+    updateCouponSchema,
+} = require('../../schema/coupon.schema');
+const { discountDataSchema } = require('../../schema/coupon-apply.schema');
+const CouponRepo = require('../../repositories/coupon/coupon.repo');
+const OrderCouponRepo = require('../../repositories/coupon/order-coupon.repo');
+const ProductRepo = require('../../repositories/product/product.repo');
+const CartService = require('../cart/cart.service');
+const database = require('../../models');
 
 class CouponService {
     // ===== COUPON MANAGEMENT =====
+    static async createCoupon(payload) {
+        const { error, value } = createCouponSchema.validate(payload);
+        if (error) throw new BadRequestError(error.message);
 
-    /**
-     * Tạo mã giảm giá mới
-     */
-    static async createCoupon({
-        code,
-        name,
-        description,
-        type,
-        value,
-        minOrderAmount,
-        maxDiscountAmount,
-        usageLimit,
-        usageLimitPerUser,
-        startDate,
-        endDate,
-        applicableProducts,
-        applicableCategories,
-        excludedProducts = [],
-        excludedCategories = [],
-        firstOrderOnly,
-        applicableUserGroups = [],
-        createdBy,
-    }) {
-        // Validate input
-        if (!code || !name || !type || (type !== 'free_shipping' && !value)) {
-            throw new BadRequestError('Missing required fields');
+        const code = value.code.toUpperCase();
+        if (await CouponRepo.findByCode(code)) {
+            throw new BadRequestError('Mã giảm giá đã tồn tại');
         }
-
-        if (!['percent', 'fixed', 'free_shipping'].includes(type)) {
-            throw new BadRequestError('Invalid discount type');
-        }
-
-        if (type === 'percent' && (value < 0 || value > 100)) {
-            throw new BadRequestError(
-                'Percent discount must be between 0 and 100',
-            );
-        }
-
-        if (type === 'fixed' && value < 0) {
-            throw new BadRequestError('Fixed discount must be positive');
-        }
-
-        // Check if coupon code already exists
-        const existingCoupon = await database.Coupon.findOne({
-            where: { code: code.toUpperCase() },
-        });
-
-        if (existingCoupon) {
-            throw new BadRequestError('Coupon code already exists');
-        }
-
-        // Set default value for free_shipping type
-        const couponValue = type === 'free_shipping' ? 0 : value;
-
-        // Create coupon
-        const coupon = await database.Coupon.create({
-            code: code.toUpperCase(),
-            name,
-            description,
-            type,
+        const couponValue = value.type === 'free_shipping' ? 0 : value.value;
+        const coupon = await CouponRepo.createCoupon({
+            ...value,
+            code,
             value: couponValue,
-            min_order_amount: minOrderAmount || null,
-            max_discount_amount: maxDiscountAmount || null,
-            usage_limit: usageLimit || null,
-            usage_limit_per_user: usageLimitPerUser || 1,
-            start_date: startDate || null,
-            end_date: endDate || null,
-            applicable_products: applicableProducts || null,
-            applicable_categories: applicableCategories || null,
-            excluded_products: excludedProducts || null,
-            excluded_categories: excludedCategories || null,
-            first_order_only: firstOrderOnly || false,
-            applicable_user_groups: applicableUserGroups || null,
-            created_by: createdBy,
+            min_order_amount: value.minOrderAmount || null,
+            max_discount_amount: value.maxDiscountAmount || null,
+            usage_limit: value.usageLimit || null,
+            usage_limit_per_user: value.usageLimitPerUser || 1,
+            start_date: value.startDate || null,
+            end_date: value.endDate || null,
+            applicable_products: value.applicableProducts || null,
+            applicable_categories: value.applicableCategories || null,
+            excluded_products: value.excludedProducts || null,
+            excluded_categories: value.excludedCategories || null,
+            first_order_only: value.firstOrderOnly || false,
+            applicable_user_groups: value.applicableUserGroups || null,
+            created_by: value.createdBy,
         });
-
         return toCamel(coupon.toJSON());
     }
 
-    /**
-     * Lấy danh sách coupon với phân trang
-     */
-    static async getCoupons(camelOptions = {}) {
-        // Convert camelCase to snake_case
-        const options = toSnake(camelOptions);
-
-        const {
-            page = 1,
-            limit = 10,
-            is_active,
-            type,
-            code,
-            start_date,
-            end_date,
-        } = options;
-
-        const whereConditions = {};
-
-        if (is_active !== undefined) {
-            whereConditions.is_active = is_active;
-        }
-
-        if (type) {
-            whereConditions.type = type;
-        }
-
-        if (code) {
-            whereConditions.code = {
-                [Op.iLike]: `%${code}%`,
-            };
-        }
-
-        if (start_date || end_date) {
-            whereConditions[Op.and] = [];
-            if (start_date) {
-                whereConditions[Op.and].push({
-                    [Op.or]: [
-                        { start_date: { [Op.gte]: start_date } },
-                        { start_date: null },
-                    ],
-                });
-            }
-            if (end_date) {
-                whereConditions[Op.and].push({
-                    [Op.or]: [
-                        { end_date: { [Op.lte]: end_date } },
-                        { end_date: null },
-                    ],
-                });
-            }
-        }
-
+    static async getCoupons(
+        options = { isActive: true, type: null, code: null },
+    ) {
+        const page = options.page || 1;
+        const limit = options.limit || 10;
         const offset = (page - 1) * limit;
+        const where = {};
+        if (options.isActive !== undefined) where.is_active = options.isActive;
+        if (options.type) where.type = options.type;
+        if (options.code) where.code = { [Op.iLike]: `%${options.code}%` };
 
-        const { count, rows } = await database.Coupon.findAndCountAll({
-            where: whereConditions,
-            limit: parseInt(limit),
-            offset: offset,
-            order: [['create_time', 'DESC']],
-        });
+        const { count, rows } = await CouponRepo.findAndCountAll(
+            where,
+            limit,
+            offset,
+            [['create_time', 'DESC']],
+        );
 
         return {
-            items: toCamel(rows.map((row) => row.toJSON())),
+            items: toCamel(rows.map((r) => r.toJSON())),
             meta: {
                 totalItems: count,
-                currentPage: parseInt(page),
-                itemsPerPage: parseInt(limit),
+                currentPage: page,
+                itemsPerPage: limit,
                 totalPages: Math.ceil(count / limit),
             },
         };
     }
 
-    /**
-     * Lấy chi tiết coupon
-     */
     static async getCouponById(id) {
-        const coupon = await database.Coupon.findByPk(id);
-        if (!coupon) {
-            throw new NotFoundError('Coupon not found');
-        }
+        const coupon = await CouponRepo.findById(id);
+        if (!coupon) throw new NotFoundError('Không tìm thấy mã giảm giá');
         return toCamel(coupon.toJSON());
     }
 
-    /**
-     * Cập nhật coupon
-     */
-    static async updateCoupon({
-        id,
-        code,
-        name,
-        description,
-        type,
-        value,
-        minOrderAmount,
-        maxOrderAmount,
-        usageLimit,
-        usageLimitPerUser,
-        startDate,
-        endDate,
-        applicableProducts = [],
-        applicableCategories = [],
-        excludedProducts = [],
-        excludedCategories = [],
-        firstOrderOnly,
-        applicableUserGroups = [],
-        createdBy,
-    }) {
-        // Find coupon
-        const coupon = await database.Coupon.findByPk(id);
-        if (!coupon) {
-            throw new NotFoundError('Coupon not found');
-        }
+    static async updateCoupon(payload) {
+        const { error, value } = updateCouponSchema.validate(payload);
+        if (error) throw new BadRequestError(error.message);
 
-        // Prepare update data
+        const coupon = await CouponRepo.findById(value.id);
+        if (!coupon) throw new NotFoundError('Không tìm thấy mã giảm giá');
+
         const updateData = {};
-
-        // Validate and update code
-        if (code && code !== coupon.code) {
-            const existingCoupon = await database.Coupon.findOne({
-                where: {
-                    code: code.toUpperCase(),
-                    id: { [Op.ne]: id },
-                },
-            });
-            if (existingCoupon) {
-                throw new BadRequestError('Coupon code already exists');
+        if (value.code && value.code !== coupon.code) {
+            if (await CouponRepo.findByCode(value.code.toUpperCase())) {
+                throw new BadRequestError('Mã giảm giá đã tồn tại');
             }
-            updateData.code = code.toUpperCase();
+            updateData.code = value.code.toUpperCase();
         }
-
-        // Validate type
-        if (type && !['percent', 'fixed', 'free_shipping'].includes(type)) {
-            throw new BadRequestError('Invalid discount type');
-        }
-
-        // Validate value
-        if (
-            type === 'percent' ||
-            (type === undefined && coupon.type === 'percent')
-        ) {
-            const percentValue = value !== undefined ? value : coupon.value;
-            if (percentValue < 0 || percentValue > 100) {
-                throw new BadRequestError(
-                    'Percent discount must be between 0 and 100',
-                );
-            }
-        }
-        if (
-            type === 'fixed' ||
-            (type === undefined && coupon.type === 'fixed')
-        ) {
-            const fixedValue = value !== undefined ? value : coupon.value;
-            if (fixedValue < 0) {
-                throw new BadRequestError('Fixed discount must be positive');
-            }
-        }
-
-        // Set fields if provided
-        if (name !== undefined && name !== null) updateData.name = name;
-        if (description !== undefined && description !== null)
-            updateData.description = description;
-        if (type !== undefined && type !== null) updateData.type = type;
-        if (value !== undefined && value !== null)
-            updateData.value = type === 'free_shipping' ? 0 : value;
-        if (minOrderAmount !== undefined && minOrderAmount !== null)
-            updateData.min_order_amount = minOrderAmount;
-        if (maxOrderAmount !== undefined && maxOrderAmount !== null)
-            updateData.max_discount_amount = maxOrderAmount;
-        if (usageLimit !== undefined && usageLimit !== null)
-            updateData.usage_limit = usageLimit;
-        if (usageLimitPerUser !== undefined && usageLimitPerUser !== null)
-            updateData.usage_limit_per_user = usageLimitPerUser;
-        if (startDate !== undefined && startDate !== null)
-            updateData.start_date = startDate;
-        if (endDate !== undefined && endDate !== null)
-            updateData.end_date = endDate;
-        if (applicableProducts !== undefined && applicableProducts !== null)
-            updateData.applicable_products = applicableProducts;
-        if (applicableCategories !== undefined && applicableCategories !== null)
-            updateData.applicable_categories = applicableCategories;
-        if (excludedProducts !== undefined && excludedProducts !== null)
-            updateData.excluded_products = excludedProducts;
-        if (excludedCategories !== undefined && excludedCategories !== null)
-            updateData.excluded_categories = excludedCategories;
-        if (firstOrderOnly !== undefined && firstOrderOnly !== null)
-            updateData.first_order_only = firstOrderOnly;
-        if (applicableUserGroups !== undefined && applicableUserGroups !== null)
-            updateData.applicable_user_groups = applicableUserGroups;
-        if (createdBy !== undefined && createdBy !== null)
-            updateData.created_by = createdBy;
-
-        console.log('Update data:', updateData);
+        if (value.name !== undefined) updateData.name = value.name;
+        if (value.description !== undefined)
+            updateData.description = value.description;
+        if (value.type !== undefined) updateData.type = value.type;
+        if (value.value !== undefined)
+            updateData.value = value.type === 'free_shipping' ? 0 : value.value;
+        if (value.minOrderAmount !== undefined)
+            updateData.min_order_amount = value.minOrderAmount;
+        if (value.maxOrderAmount !== undefined)
+            updateData.max_discount_amount = value.maxOrderAmount;
+        if (value.usageLimit !== undefined)
+            updateData.usage_limit = value.usageLimit;
+        if (value.usageLimitPerUser !== undefined)
+            updateData.usage_limit_per_user = value.usageLimitPerUser;
+        if (value.startDate !== undefined)
+            updateData.start_date = value.startDate;
+        if (value.endDate !== undefined) updateData.end_date = value.endDate;
+        if (value.applicableProducts !== undefined)
+            updateData.applicable_products = value.applicableProducts;
+        if (value.applicableCategories !== undefined)
+            updateData.applicable_categories = value.applicableCategories;
+        if (value.excludedProducts !== undefined)
+            updateData.excluded_products = value.excludedProducts;
+        if (value.excludedCategories !== undefined)
+            updateData.excluded_categories = value.excludedCategories;
+        if (value.firstOrderOnly !== undefined)
+            updateData.first_order_only = value.firstOrderOnly;
+        if (value.applicableUserGroups !== undefined)
+            updateData.applicable_user_groups = value.applicableUserGroups;
+        if (value.createdBy !== undefined)
+            updateData.created_by = value.createdBy;
 
         await coupon.update(updateData);
         return toCamel(coupon.toJSON());
     }
 
-    // ===== COUPON STATUS MANAGEMENT =====
+    static async deleteCoupon(id) {
+        const coupon = await CouponRepo.findById(id);
+        if (!coupon) throw new NotFoundError('Không tìm thấy mã giảm giá');
+
+        const usageCount = await OrderCouponRepo.count({
+            where: { coupon_id: id },
+        });
+        if (usageCount > 0)
+            throw new BadRequestError(
+                'Không thể xóa mã giảm giá đã được sử dụng',
+            );
+
+        await coupon.destroy();
+        return { message: 'Xóa mã giảm giá thành công' };
+    }
+
     static async toggleCouponStatus(id, isActive) {
-        const coupon = await database.Coupon.findByPk(id);
-        if (!coupon) {
-            throw new NotFoundError('Coupon not found');
-        }
+        const coupon = await CouponRepo.findById(id);
+        if (!coupon) throw new NotFoundError('Không tìm thấy mã giảm giá');
         await coupon.update({ is_active: isActive });
         return toCamel(coupon.toJSON());
     }
 
-    /**
-     * Xóa coupon
-     */
-    static async deleteCoupon(id) {
-        const coupon = await database.Coupon.findByPk(id);
-        if (!coupon) {
-            throw new NotFoundError('Coupon not found');
+    // ===== GET COUPONS VALID FOR CART =====
+    static async getValidCouponsForCart({ userId }) {
+        if (!userId) {
+            throw new BadRequestError('Người dùng không hợp lệ');
         }
 
-        // Check if coupon has been used
-        const usageCount = await database.OrderCoupon.count({
-            where: { coupon_id: id },
-        });
+        const foundCartActive = await CartService.getCartsByUserId(userId);
 
-        if (usageCount > 0) {
+        if (!foundCartActive) {
             throw new BadRequestError(
-                'Cannot delete coupon that has been used',
+                'Giỏ hàng không hợp lệ hoặc không tồn tại',
             );
         }
 
-        await coupon.destroy();
-        return { message: 'Coupon deleted successfully' };
+        const coupons = await CouponRepo.findAllActiveCoupons();
+        const productIds = foundCartActive.lineItems.map((i) => ({
+            productId: i.productId,
+            quantity: i.quantity,
+            price: i.product.price,
+        }));
+        const subTotal = foundCartActive.lineItems.reduce((total, item) => {
+            return total + item.price * item.quantity;
+        }, 0);
+        const products =
+            await ProductRepo.findProductsByIdsWithCategories(productIds);
+
+        const validCoupons = [];
+        for (const coupon of coupons) {
+            // Kiểm tra usage_limit_per_user
+            let userUsageCount = 0;
+            // Nếu coupon
+            if (coupon.usage_limit_per_user && foundCartActive.userId) {
+                userUsageCount = await OrderCouponRepo.count({
+                    where: {
+                        coupon_id: coupon.id,
+                    },
+                    include: [
+                        {
+                            model: database.Order,
+                            as: 'order',
+                            where: { user_id: foundCartActive.userId },
+                        },
+                    ],
+                });
+                // Nếu user đã dùng quá số lần cho phép
+                if (userUsageCount >= coupon.usage_limit_per_user) {
+                    continue; // Bỏ qua coupon này nếu user đã dùng quá số lần cho phép
+                }
+            }
+            const ok = await this.isCouponValidForCart(
+                coupon,
+                {
+                    userId: foundCartActive.user_id,
+                    subtotal: subTotal,
+                    items: productIds,
+                    shippingFee: 0,
+                },
+                products,
+            );
+            if (ok) validCoupons.push(toCamel(coupon.toJSON()));
+        }
+        return validCoupons;
     }
 
-    // ===== USER COUPON MANAGEMENT =====
+    static async isCouponValidForCart(coupon, cartInfo, productList) {
+        const now = new Date();
+        if (coupon.start_date && coupon.start_date > now) return false;
+        if (coupon.end_date && coupon.end_date < now) return false;
+        if (!coupon.is_active) return false;
+        if (coupon.usage_limit && coupon.used_count >= coupon.usage_limit)
+            return false;
+        if (
+            coupon.min_order_amount &&
+            cartInfo.subtotal < coupon.min_order_amount
+        )
+            return false;
 
-    /**
-     * Tặng coupon cho user
-     */
-    static async grantCouponToUser(camelData) {
-        // Convert camelCase to snake_case for database
-        const data = toSnake(camelData);
-
-        const {
-            user_id,
-            coupon_id,
-            personal_code,
-            gift_message,
-            max_usage = 1,
-            valid_from,
-            valid_until,
-            source = 'system_reward',
-            metadata,
-        } = data;
-
-        // Validate required fields
-        if (!user_id || !coupon_id) {
-            throw new BadRequestError('user_id and coupon_id are required');
+        if (coupon.applicable_products?.length > 0) {
+            if (
+                !cartInfo.items.some((i) =>
+                    coupon.applicable_products.includes(i.productId),
+                )
+            )
+                return false;
         }
-
-        // Validate coupon exists
-        const coupon = await database.Coupon.findByPk(coupon_id);
-        if (!coupon) {
-            throw new NotFoundError('Coupon not found');
+        if (coupon.applicable_categories?.length > 0) {
+            if (
+                !productList.some((prod) =>
+                    prod.categories.some((cat) =>
+                        coupon.applicable_categories.includes(cat.id),
+                    ),
+                )
+            )
+                return false;
         }
-
-        // Validate user exists
-        const user = await database.User.findByPk(user_id);
-        if (!user) {
-            throw new NotFoundError('User not found');
-        }
-
-        // Check if user already has this coupon
-        const existingUserCoupon = await database.UserCoupon.findOne({
-            where: { user_id, coupon_id },
-        });
-
-        if (existingUserCoupon) {
-            throw new BadRequestError('User already has this coupon');
-        }
-
-        // Create user coupon
-        const userCoupon = await database.UserCoupon.create({
-            user_id,
-            coupon_id,
-            personal_code,
-            gift_message,
-            max_usage,
-            valid_from,
-            valid_until,
-            source,
-            metadata,
-        });
-
-        return toCamel(userCoupon.toJSON());
-    }
-
-    /**
-     * Lấy danh sách coupon của user
-     */
-    static async getUserCoupons(user_id, camelOptions = {}) {
-        // Validate user_id
-        if (!user_id || user_id === undefined) {
-            throw new BadRequestError('user_id is required');
-        }
-
-        // Convert camelCase to snake_case
-        const options = toSnake(camelOptions);
-
-        const {
-            page = 1,
-            limit = 10,
-            is_active,
-            is_available_only = false,
-        } = options;
-
-        const whereConditions = { user_id };
-
-        if (is_active !== undefined) {
-            whereConditions.is_active = is_active;
-        }
-
-        // Filter available coupons only
-        if (is_available_only) {
-            const now = new Date();
-            whereConditions[Op.and] = [
-                { is_active: true },
-                {
-                    [Op.or]: [
-                        { valid_from: null },
-                        { valid_from: { [Op.lte]: now } },
-                    ],
-                },
-                {
-                    [Op.or]: [
-                        { valid_until: null },
-                        { valid_until: { [Op.gte]: now } },
-                    ],
-                },
-                // Still has usage left - specify table alias
-                database.sequelize.literal(
-                    '`UserCoupon`.`used_count` < `UserCoupon`.`max_usage`',
-                ),
-            ];
-        }
-
-        const offset = (page - 1) * limit;
-
-        const { count, rows } = await database.UserCoupon.findAndCountAll({
-            where: whereConditions,
-            include: [
-                {
-                    model: database.Coupon,
-                    as: 'coupon',
-                    where: is_available_only ? { is_active: true } : undefined,
-                },
-            ],
-            limit: parseInt(limit),
-            offset: offset,
-            order: [['create_time', 'DESC']],
-        });
-
-        return {
-            items: toCamel(rows.map((row) => row.toJSON())),
-            meta: {
-                totalItems: count,
-                currentPage: parseInt(page),
-                itemsPerPage: parseInt(limit),
-                totalPages: Math.ceil(count / limit),
-            },
-        };
-    }
-
-    /**
-     * lấy danh sách coupon hệ thống hợp lệ
-     */
-    static async getAvailableSystemCoupon(user_id, camelOptions = {}) {
-        // Validate user_id
-        if (!user_id || user_id === undefined) {
-            throw new BadRequestError('user_id is required');
-        }
-
-        // const foundCart = database.Cart.findByPk(cartId, {
-        //     include: [
-        //         {
-        //             model: database.CartItem,
-        //             as: 'lineItems',
-        //         },
-        //     ],
-        // });
-
-        // Convert camelCase to snake_case
-        const options = toSnake(camelOptions);
-
-        const {
-            page = 1,
-            limit = 10,
-            is_active,
-            is_available_only = false,
-        } = options;
-
-        const whereConditions = { user_id };
-
-        if (is_active !== undefined) {
-            whereConditions.is_active = is_active;
-        }
-
-        // Filter available coupons only
-        if (is_available_only) {
-            const now = new Date();
-            whereConditions[Op.and] = [
-                { is_active: true },
-                {
-                    [Op.or]: [
-                        { valid_from: null },
-                        { valid_from: { [Op.lte]: now } },
-                    ],
-                },
-                {
-                    [Op.or]: [
-                        { valid_until: null },
-                        { valid_until: { [Op.gte]: now } },
-                    ],
-                },
-                // Still has usage left - specify table alias
-                database.sequelize.literal(
-                    '`UserCoupon`.`used_count` < `UserCoupon`.`max_usage`',
-                ),
-            ];
-        }
-
-        const offset = (page - 1) * limit;
-
-        const { count: couponSystemCount, rows: couponSystemRows } =
-            await database.Coupon.findAndCountAll({
-                where: {
-                    is_active: true,
-                },
-                limit: parseInt(limit),
-                offset: offset,
-                order: [['create_time', 'DESC']],
-            });
-
-        return {
-            items: toCamel(couponSystemRows.map((row) => row.toJSON())),
-            meta: {
-                totalItems: couponSystemCount,
-                currentPage: parseInt(page),
-                itemsPerPage: parseInt(limit),
-                totalPages: Math.ceil(couponSystemCount / limit),
-            },
-        };
+        return true;
     }
 
     // ===== COUPON VALIDATION & APPLICATION =====
-
-    /**
-     * Validate coupon system có thể sử dụng không
-     */
     static async validateCoupon(code, user_id, camelOrderData) {
-        // Validate inputs
-        if (!code) {
-            throw new BadRequestError('Coupon code is required');
-        }
-
-        // Convert camelCase to snake_case
+        if (!code) throw new BadRequestError('Mã giảm giá là bắt buộc');
         const order_data = toSnake(camelOrderData);
 
-        const coupon = await database.Coupon.findOne({
-            where: {
-                code: code.toUpperCase(),
-                is_active: true,
-            },
-        });
-
-        if (!coupon) {
-            throw new NotFoundError('Coupon not found or inactive');
-        }
+        const coupon = await CouponRepo.findActiveByCode(code);
+        if (!coupon) throw new NotFoundError('Không tìm thấy mã giảm giá');
 
         const now = new Date();
 
-        // Check time validity
-        if (coupon.start_date && coupon.start_date > now) {
-            throw new BadRequestError('Coupon not yet valid');
-        }
+        if (coupon.start_date && coupon.start_date > now)
+            throw new BadRequestError('Mã giảm giá chưa có hiệu lực');
+        if (coupon.end_date && coupon.end_date < now)
+            throw new BadRequestError('Mã giảm giá đã hết hạn');
+        if (coupon.usage_limit && coupon.used_count >= coupon.usage_limit)
+            throw new BadRequestError(
+                'Mã giảm giá đã được sử dụng quá số lần cho phép',
+            );
 
-        if (coupon.end_date && coupon.end_date < now) {
-            throw new BadRequestError('Coupon has expired');
-        }
-
-        // Check usage limit
-        if (coupon.usage_limit && coupon.used_count >= coupon.usage_limit) {
-            throw new BadRequestError('Coupon usage limit exceeded');
-        }
-
-        // Check user specific limitations
+        // User limitation
         if (user_id) {
-            const userCouponUsage = await database.OrderCoupon.count({
-                where: { coupon_id: coupon.id },
+            const userCouponUsage = await OrderCouponRepo.count({
+                where: {
+                    coupon_id: coupon.id,
+                },
                 include: [
                     {
                         model: database.Order,
                         as: 'order',
-                        where: { user_id },
+                        where: { user_id: user_id },
                     },
                 ],
             });
-
             if (
                 coupon.usage_limit_per_user &&
                 userCouponUsage >= coupon.usage_limit_per_user
-            ) {
+            )
                 throw new BadRequestError(
-                    'User has exceeded coupon usage limit',
+                    'Bạn đã sử dụng mã giảm giá này quá số lần cho phép',
                 );
-            }
 
-            // Check first order only
             if (coupon.first_order_only) {
-                const userOrderCount = await database.Order.count({
-                    where: {
-                        user_id,
-                        status: { [Op.ne]: 'cancelled' },
-                    },
-                });
-
-                if (userOrderCount > 0) {
-                    throw new BadRequestError(
-                        'Coupon is only valid for first order',
-                    );
-                }
+                // Bạn có thể bổ sung repo.countUserOrders(user_id) nếu muốn kiểm tra lần đầu mua
             }
         }
 
-        // Check minimum order amount
         if (
             coupon.min_order_amount &&
             order_data.subtotal < coupon.min_order_amount
-        ) {
+        )
             throw new BadRequestError(
                 `Minimum order amount is ${coupon.min_order_amount}`,
             );
-        }
 
-        // Check applicable products/categories
         if (order_data.items && order_data.items.length > 0) {
             const validationResult = await this.validateCouponProducts(
                 coupon,
                 order_data.items,
             );
-            if (!validationResult.isValid) {
+            if (!validationResult.isValid)
                 throw new BadRequestError(validationResult.message);
-            }
         }
-
         return toCamel(coupon.toJSON());
     }
 
-    /**
-     * Validate coupon có áp dụng được cho sản phẩm không
-     */
     static async validateCouponProducts(coupon, orderItems) {
-        // If no restrictions, coupon applies to all products
         if (
             !coupon.applicable_products &&
             !coupon.applicable_categories &&
@@ -657,27 +327,16 @@ class CouponService {
         ) {
             return { isValid: true };
         }
-
         const productIds = orderItems.map((item) => item.product_id);
 
         // Get products with categories
-        const products = await database.Product.findAll({
-            where: { id: productIds },
-            include: [
-                {
-                    model: database.Category,
-                    as: 'categories',
-                    through: { attributes: [] },
-                },
-            ],
-        });
+        const products =
+            await ProductRepo.findProductsByIdsWithCategories(productIds);
 
-        // Check excluded products
         if (coupon.excluded_products && coupon.excluded_products.length > 0) {
-            const hasExcludedProduct = productIds.some((id) =>
-                coupon.excluded_products.includes(id),
-            );
-            if (hasExcludedProduct) {
+            if (
+                productIds.some((id) => coupon.excluded_products.includes(id))
+            ) {
                 return {
                     isValid: false,
                     message:
@@ -685,18 +344,17 @@ class CouponService {
                 };
             }
         }
-
-        // Check excluded categories
         if (
             coupon.excluded_categories &&
             coupon.excluded_categories.length > 0
         ) {
-            const hasExcludedCategory = products.some((product) =>
-                product.categories.some((category) =>
-                    coupon.excluded_categories.includes(category.id),
-                ),
-            );
-            if (hasExcludedCategory) {
+            if (
+                products.some((product) =>
+                    product.categories.some((category) =>
+                        coupon.excluded_categories.includes(category.id),
+                    ),
+                )
+            ) {
                 return {
                     isValid: false,
                     message:
@@ -704,16 +362,15 @@ class CouponService {
                 };
             }
         }
-
-        // Check applicable products
         if (
             coupon.applicable_products &&
             coupon.applicable_products.length > 0
         ) {
-            const hasApplicableProduct = productIds.some((id) =>
-                coupon.applicable_products.includes(id),
-            );
-            if (!hasApplicableProduct) {
+            if (
+                !productIds.some((id) =>
+                    coupon.applicable_products.includes(id),
+                )
+            ) {
                 return {
                     isValid: false,
                     message:
@@ -721,18 +378,17 @@ class CouponService {
                 };
             }
         }
-
-        // Check applicable categories
         if (
             coupon.applicable_categories &&
             coupon.applicable_categories.length > 0
         ) {
-            const hasApplicableCategory = products.some((product) =>
-                product.categories.some((category) =>
-                    coupon.applicable_categories.includes(category.id),
-                ),
-            );
-            if (!hasApplicableCategory) {
+            if (
+                !products.some((product) =>
+                    product.categories.some((category) =>
+                        coupon.applicable_categories.includes(category.id),
+                    ),
+                )
+            ) {
                 return {
                     isValid: false,
                     message:
@@ -740,16 +396,11 @@ class CouponService {
                 };
             }
         }
-
         return { isValid: true };
     }
 
-    /**
-     * Tính toán discount amount
-     */
-    static calculateDiscount(coupon, camelOrderData) {
-        // Convert camelCase to snake_case
-        const order_data = toSnake(camelOrderData);
+    static calculateDiscount(coupon, cartInfo) {
+        const order_data = toSnake(cartInfo);
 
         let discountAmount = 0;
         let shippingDiscount = 0;
@@ -759,7 +410,7 @@ class CouponService {
             if (coupon.maxDiscountAmount) {
                 discountAmount = Math.min(
                     discountAmount,
-                    coupon.maxDiscountAmount,
+                    parseInt(coupon.maxDiscountAmount),
                 );
             }
         } else if (coupon.type === 'fixed') {
@@ -774,116 +425,59 @@ class CouponService {
         };
     }
 
-    /**
-     * Áp dụng coupon vào order
-     */
     static async applyCouponToOrder(
-        order_id,
-        coupon_id,
-        user_coupon_id,
+        orderId,
+        couponId,
         camelDiscountData,
-        transaction, // thêm transaction param
+        transaction,
     ) {
-        console.log('Applying coupon to order:', {
-            order_id,
-            coupon_id,
-            user_coupon_id,
-            camelDiscountData,
-        });
-        // Convert camelCase to snake_case
-        const discount_data = toSnake(camelDiscountData);
+        const { error, value: discountData } =
+            discountDataSchema.validate(camelDiscountData);
+        if (error) throw new BadRequestError(error.message);
 
-        // Ép kiểu về số cho các trường số
-        const discountValue = Number(discount_data.discount_value);
-        const discountAmount = Number(discount_data.discount_amount);
-        const orderSubtotal = Number(discount_data.order_subtotal);
-        const shippingFee = Number(discount_data.shipping_fee);
-        const shippingDiscount = Number(discount_data.shipping_discount);
+        const discountValue = Number(discountData.discountValue);
+        const discountAmount = Number(discountData.discountAmount);
+        const orderSubtotal = Number(discountData.orderSubtotal);
+        const shippingFee = Number(discountData.shippingFee);
+        const shippingDiscount = Number(discountData.shippingDiscount);
 
-        // Chuẩn hóa conditions_met từ dữ liệu truyền vào (ưu tiên dữ liệu truyền vào)
-        let rawConditionsMet = discount_data.conditions_met || {};
+        let rawConditionsMet = discountData.conditionsMet || {};
         const conditionsMet = {
-            min_order_amount:
-                rawConditionsMet.min_order_amount !== undefined &&
-                rawConditionsMet.min_order_amount !== null
-                    ? Number(rawConditionsMet.min_order_amount)
+            minOrderAmount:
+                rawConditionsMet.minOrderAmount !== undefined &&
+                rawConditionsMet.minOrderAmount !== null
+                    ? Number(rawConditionsMet.minOrderAmount)
                     : 0,
-            applicable_products: Array.isArray(
-                rawConditionsMet.applicable_products,
+            applicableProducts: Array.isArray(
+                rawConditionsMet.applicableProducts,
             )
-                ? rawConditionsMet.applicable_products
+                ? rawConditionsMet.applicableProducts
                 : [],
-            applicable_categories: Array.isArray(
-                rawConditionsMet.applicable_categories,
+            applicableCategories: Array.isArray(
+                rawConditionsMet.applicableCategories,
             )
-                ? rawConditionsMet.applicable_categories
+                ? rawConditionsMet.applicableCategories
                 : [],
         };
 
-        // Log dữ liệu chuẩn bị lưu
-        console.log('OrderCoupon create data:', {
-            order_id,
-            coupon_id,
-            user_coupon_id,
-            coupon_code: discount_data.coupon_code,
-            discount_type: discount_data.discount_type,
-            discount_value: discountValue,
-            discount_amount: discountAmount,
-            order_subtotal: orderSubtotal,
-            shipping_fee: shippingFee,
-            shipping_discount: shippingDiscount,
-            applied_products: discount_data.applied_products,
-            conditions_met: conditionsMet,
-        });
+        const orderCoupon = await OrderCouponRepo.create(
+            {
+                order_id: orderId,
+                coupon_id: couponId,
+                coupon_code: discountData.couponCode,
+                discount_type: discountData.discountType,
+                discount_value: discountValue,
+                discount_amount: discountAmount,
+                order_subtotal: orderSubtotal,
+                shipping_fee: shippingFee,
+                shipping_discount: shippingDiscount,
+                applied_products: discountData.appliedProducts || [],
+                conditions_met: conditionsMet,
+            },
+            transaction,
+        );
 
-        console.log('Before OrderCoupon.create');
-        let orderCoupon;
-        try {
-            orderCoupon = await database.OrderCoupon.create(
-                {
-                    order_id,
-                    coupon_id,
-                    user_coupon_id,
-                    coupon_code: discount_data.coupon_code,
-                    discount_type: discount_data.discount_type,
-                    discount_value: discountValue,
-                    discount_amount: discountAmount,
-                    order_subtotal: orderSubtotal,
-                    shipping_fee: shippingFee,
-                    shipping_discount: shippingDiscount,
-                    applied_products: discount_data.applied_products || [],
-                    conditions_met: conditionsMet,
-                },
-                transaction ? { transaction } : undefined,
-            );
-            console.log('OrderCoupon.create success');
-        } catch (err) {
-            console.error('OrderCoupon create error:', err);
-            throw err;
-        }
-
-        // Update coupon usage count
-        await database.Coupon.increment('used_count', {
-            where: { id: coupon_id },
-            ...(transaction ? { transaction } : {}),
-        });
-
-        // Update user coupon usage
-        if (user_coupon_id) {
-            const [userCoupon, created] =
-                await database.UserCoupon.findOrCreate({
-                    where: { id: user_coupon_id },
-                    ...(transaction ? { transaction } : {}),
-                });
-            await userCoupon.update(
-                {
-                    used_count: (userCoupon.used_count || 0) + 1,
-                    first_used_at: userCoupon.first_used_at || new Date(),
-                    last_used_at: new Date(),
-                },
-                transaction ? { transaction } : undefined,
-            );
-        }
+        await CouponRepo.incrementUsedCount(couponId, transaction);
 
         return orderCoupon;
     }

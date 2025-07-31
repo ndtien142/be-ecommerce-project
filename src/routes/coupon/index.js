@@ -38,66 +38,32 @@ const couponController = require('../../controllers/coupon.controller');
  *         value:
  *           type: number
  *           description: Giá trị giảm (% hoặc VND)
- *         min_order_amount:
+ *         minOrderAmount:
  *           type: number
  *           description: Giá trị đơn hàng tối thiểu
- *         max_discount_amount:
+ *         maxDiscountAmount:
  *           type: number
  *           description: Số tiền giảm tối đa
- *         usage_limit:
+ *         usageLimit:
  *           type: integer
  *           description: Số lần sử dụng tối đa
- *         usage_limit_per_user:
+ *         usageLimitPerUser:
  *           type: integer
  *           description: Số lần mỗi user có thể sử dụng
- *         start_date:
+ *         startDate:
  *           type: string
  *           format: date-time
  *           description: Ngày bắt đầu
- *         end_date:
+ *         endDate:
  *           type: string
  *           format: date-time
  *           description: Ngày kết thúc
- *         is_active:
+ *         isActive:
  *           type: boolean
  *           description: Trạng thái hoạt động
- *         first_order_only:
+ *         firstOrderOnly:
  *           type: boolean
  *           description: Chỉ áp dụng cho đơn hàng đầu tiên
- *
- *     UserCoupon:
- *       type: object
- *       properties:
- *         id:
- *           type: integer
- *         user_id:
- *           type: integer
- *         coupon_id:
- *           type: integer
- *         personal_code:
- *           type: string
- *           description: Mã cá nhân hóa
- *         gift_message:
- *           type: string
- *           description: Lời nhắn tặng
- *         used_count:
- *           type: integer
- *           description: Số lần đã sử dụng
- *         max_usage:
- *           type: integer
- *           description: Số lần tối đa có thể sử dụng
- *         valid_from:
- *           type: string
- *           format: date-time
- *         valid_until:
- *           type: string
- *           format: date-time
- *         is_active:
- *           type: boolean
- *         source:
- *           type: string
- *           enum: [system_reward, admin_gift, event_reward, referral_bonus, loyalty_point]
- *           description: Nguồn gốc voucher
  *
  *     CouponValidation:
  *       type: object
@@ -111,7 +77,7 @@ const couponController = require('../../controllers/coupon.controller');
  *         subtotal:
  *           type: number
  *           description: Tổng tiền sản phẩm
- *         shipping_fee:
+ *         shippingFee:
  *           type: number
  *           description: Phí vận chuyển
  *         items:
@@ -119,7 +85,7 @@ const couponController = require('../../controllers/coupon.controller');
  *           items:
  *             type: object
  *             properties:
- *               product_id:
+ *               productId:
  *                 type: integer
  *               quantity:
  *                 type: integer
@@ -129,29 +95,41 @@ const couponController = require('../../controllers/coupon.controller');
 
 /**
  * @swagger
- * /api/v1/coupons/available:
- *   get:
- *     summary: Lấy danh sách coupon có sẵn
+ * /coupons/available:
+ *   post:
+ *     summary: Lấy danh sách coupon hợp lệ cho giỏ hàng hiện tại
  *     tags: [Coupons]
  *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 10
- *       - in: query
- *         name: type
- *         schema:
- *           type: string
- *           enum: [percent, fixed, free_shipping]
+ *       - $ref: '#/components/parameters/userId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *               - subtotal
+ *               - items
+ *             properties:
+ *               userId:
+ *                 type: integer
+ *               subtotal:
+ *                 type: number
+ *               shippingFee:
+ *                 type: number
+ *               items:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     productId:
+ *                       type: integer
+ *                     quantity:
+ *                       type: integer
  *     responses:
  *       200:
- *         description: Lấy danh sách coupon thành công
+ *         description: Lấy các coupon hợp lệ thành công
  *         content:
  *           application/json:
  *             schema:
@@ -166,20 +144,18 @@ const couponController = require('../../controllers/coupon.controller');
  *                       type: array
  *                       items:
  *                         $ref: '#/components/schemas/Coupon'
- *                     pagination:
- *                       type: object
  */
 
 /**
  * @swagger
- * /api/v1/coupons/validate:
+ * /coupons/validate:
  *   post:
  *     summary: Validate mã coupon
  *     tags: [Coupons]
+ *     parameters:
+ *       - $ref: '#/components/parameters/userId'
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
  *       required: true
  *       content:
@@ -204,9 +180,9 @@ const couponController = require('../../controllers/coupon.controller');
  *                     discount:
  *                       type: object
  *                       properties:
- *                         discount_amount:
+ *                         discountAmount:
  *                           type: number
- *                         shipping_discount:
+ *                         shippingDiscount:
  *                           type: number
  *       400:
  *         description: Coupon không hợp lệ
@@ -214,55 +190,14 @@ const couponController = require('../../controllers/coupon.controller');
 
 /**
  * @swagger
- * /api/v1/coupons/my-available:
- *   get:
- *     summary: Lấy danh sách coupon có sẵn của tôi
- *     tags: [Coupons]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - $ref: '#/components/parameters/UserIdHeader'
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 10
- *     responses:
- *       200:
- *         description: Lấy danh sách coupon thành công
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                 metadata:
- *                   type: object
- *                   properties:
- *                     user_coupons:
- *                       type: array
- *                       items:
- *                         $ref: '#/components/schemas/UserCoupon'
- *                     pagination:
- *                       type: object
- */
-
-/**
- * @swagger
- * /api/v1/coupons:
+ * /coupons:
  *   post:
  *     summary: Tạo mã coupon mới
  *     tags: [Coupons - Admin]
+ *     parameters:
+ *       - $ref: '#/components/parameters/userId'
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - $ref: '#/components/parameters/UserIdHeader'
  *     requestBody:
  *       required: true
  *       content:
@@ -290,7 +225,7 @@ const couponController = require('../../controllers/coupon.controller');
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - $ref: '#/components/parameters/UserIdHeader'
+ *       - $ref: '#/components/parameters/userId'
  *       - in: query
  *         name: page
  *         schema:
@@ -302,7 +237,7 @@ const couponController = require('../../controllers/coupon.controller');
  *           type: integer
  *           default: 10
  *       - in: query
- *         name: is_active
+ *         name: isActive
  *         schema:
  *           type: boolean
  *       - in: query
@@ -317,18 +252,43 @@ const couponController = require('../../controllers/coupon.controller');
  *     responses:
  *       200:
  *         description: Lấy danh sách coupon thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 metadata:
+ *                   type: object
+ *                   properties:
+ *                     items:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Coupon'
+ *                     meta:
+ *                       type: object
+ *                       properties:
+ *                         totalItems:
+ *                           type: integer
+ *                         currentPage:
+ *                           type: integer
+ *                         itemsPerPage:
+ *                           type: integer
+ *                         totalPages:
+ *                           type: integer
  */
 
 /**
  * @swagger
- * /api/v1/coupons/{id}:
+ * /coupons/{id}:
  *   get:
  *     summary: Lấy chi tiết coupon
  *     tags: [Coupons - Admin]
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - $ref: '#/components/parameters/UserIdHeader'
+ *       - $ref: '#/components/parameters/userId'
  *       - in: path
  *         name: id
  *         required: true
@@ -355,7 +315,7 @@ const couponController = require('../../controllers/coupon.controller');
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - $ref: '#/components/parameters/UserIdHeader'
+ *       - $ref: '#/components/parameters/userId'
  *       - in: path
  *         name: id
  *         required: true
@@ -376,7 +336,7 @@ const couponController = require('../../controllers/coupon.controller');
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - $ref: '#/components/parameters/UserIdHeader'
+ *       - $ref: '#/components/parameters/userId'
  *       - in: path
  *         name: id
  *         required: true
@@ -389,14 +349,19 @@ const couponController = require('../../controllers/coupon.controller');
 
 /**
  * @swagger
- * /api/v1/coupons/grant-user:
- *   post:
- *     summary: Tặng coupon cho user
+ * /coupons/{id}/toggle-status:
+ *   patch:
+ *     summary: Kích hoạt/vô hiệu hóa coupon
  *     tags: [Coupons - Admin]
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - $ref: '#/components/parameters/UserIdHeader'
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - $ref: '#/components/parameters/userId'
  *     requestBody:
  *       required: true
  *       content:
@@ -404,84 +369,22 @@ const couponController = require('../../controllers/coupon.controller');
  *           schema:
  *             type: object
  *             required:
- *               - user_id
- *               - coupon_id
+ *               - isActive
  *             properties:
- *               user_id:
- *                 type: integer
- *               coupon_id:
- *                 type: integer
- *               personal_code:
- *                 type: string
- *               gift_message:
- *                 type: string
- *               max_usage:
- *                 type: integer
- *                 default: 1
- *               valid_from:
- *                 type: string
- *                 format: date-time
- *               valid_until:
- *                 type: string
- *                 format: date-time
- *               source:
- *                 type: string
- *                 enum: [system_reward, admin_gift, event_reward, referral_bonus, loyalty_point]
- *     responses:
- *       201:
- *         description: Tặng coupon thành công
- */
-
-/**
- * @swagger
- * /api/v1/coupons/user/{user_id}:
- *   get:
- *     summary: Lấy danh sách coupon của user
- *     tags: [Coupons - Admin]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - $ref: '#/components/parameters/UserIdHeader'
- *       - in: path
- *         name: user_id
- *         required: true
- *         schema:
- *           type: integer
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 10
- *       - in: query
- *         name: is_active
- *         schema:
- *           type: boolean
- *       - in: query
- *         name: is_available_only
- *         schema:
- *           type: boolean
+ *               isActive:
+ *                 type: boolean
  *     responses:
  *       200:
- *         description: Lấy danh sách coupon của user thành công
+ *         description: Cập nhật trạng thái coupon thành công
  */
-
-// ===== PUBLIC ROUTES =====
-
-router.get('/available', couponController.getAvailableCoupons);
-
 router.use(authenticationV2);
 
-// ===== AUTHENTICATED ROUTES =====
+// ===== PUBLIC ROUTE: Lấy các coupon hợp lệ cho giỏ hàng =====
+router.get('/available', couponController.getValidCouponsForCart);
+
+// ===== AUTH ROUTES =====
 
 router.post('/validate', couponController.validateCoupon);
-router.get('/my-available', couponController.getMyAvailableCoupons);
-router.get('/available-system', couponController.getAvailableSystemCoupon);
-router.get('/user/:user_id', couponController.getUserCoupons);
 
 // ===== ADMIN ROUTES =====
 router.use(checkRole(['admin']));
@@ -491,14 +394,12 @@ router
     .post(couponController.createCoupon)
     .get(couponController.getCoupons);
 
-router.patch('/:id/toggle-status', couponController.toggleCouponStatus);
-
-router.post('/grant-user', couponController.grantCouponToUser);
-
 router
     .route('/:id')
     .get(couponController.getCouponById)
     .put(couponController.updateCoupon)
     .delete(couponController.deleteCoupon);
+
+router.patch('/:id/toggle-status', couponController.toggleCouponStatus);
 
 module.exports = router;
