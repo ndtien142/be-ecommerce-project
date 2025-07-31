@@ -297,6 +297,7 @@ class OrderService {
                     );
                     order.total_amount =
                         order.total_amount - couponDiscount.discountAmount;
+                    order.discount_amount = couponDiscount.discountAmount;
                 } catch (err) {
                     console.error('Error when applyCouponToOrder:', err);
                     throw err;
@@ -318,7 +319,7 @@ class OrderService {
                 momoPaymentResult = await MomoPaymentService.createPayment({
                     orderId: order.id,
                     momoOrderId: momoOrderId,
-                    amount: Math.round(orderTotals.total_amount),
+                    amount: Math.round(order.total_amount),
                     orderInfo,
                     extraData,
                     internalOrderId: order.id.toString(),
@@ -342,7 +343,7 @@ class OrderService {
                 payment = await database.Payment.create(
                     {
                         order_id: order.id,
-                        amount: orderTotals.total_amount,
+                        amount: order.total_amount,
                         status: 'pending',
                     },
                     { transaction },

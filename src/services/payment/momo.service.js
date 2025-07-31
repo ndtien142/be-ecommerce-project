@@ -112,12 +112,6 @@ class MomoPaymentService {
                     `MoMo payment creation failed: ${response.message}`,
                 );
             }
-            console.log('✅ MoMo payment created successfully:', response);
-            console.log('--------------------------------------------------');
-            console.log('orderId:', response.orderId);
-            console.log('orderId: ', orderId);
-            console.log('momoOrderId: ', momoOrderId);
-
             // Update cart status to ordered (cart is no longer active)
             const order = await database.Order.findByPk(orderId);
 
@@ -286,9 +280,6 @@ class MomoPaymentService {
                             resultCode,
                         },
                     );
-                    console.log(
-                        `Payment notification email sent to ${payment.order.user.user_email} for order ${payment.order.id}`,
-                    );
                 } catch (emailError) {
                     console.error(
                         'Failed to send payment notification email:',
@@ -377,25 +368,9 @@ class MomoPaymentService {
                 MOMO_ENDPOINTS.QUERY_TRANSACTION,
             );
 
-            console.log('✅ MoMo transaction status check response:', response);
-            console.log('--------------------------------------------------');
-            console.log('orderId:', orderId);
-            console.log('resultCode:', response.resultCode);
-            console.log('transId:', response.transId);
-            console.log('amount:', response.amount);
-            console.log('payType:', response.payType);
-            console.log('Current payment status:', payment.status);
-            console.log('--------------------------------------------------');
-
             // Update payment and order status based on response
             if (response.resultCode === MOMO_RESULT_CODES.SUCCESS) {
                 if (payment && payment.status === MOMO_PAYMENT_STATUS.PENDING) {
-                    console.log(
-                        '🔄 Updating payment status from PENDING to COMPLETED',
-                    );
-                    console.log('Payment ID:', payment.id);
-                    console.log('Order ID:', payment.order_id);
-
                     // Update payment status only
                     await database.Payment.update(
                         {
@@ -432,29 +407,11 @@ class MomoPaymentService {
                         }),
                     });
 
-                    console.log(
-                        '✅ Payment status updated successfully and order log created',
-                    );
-                    console.log(
-                        'New payment status:',
-                        MOMO_PAYMENT_STATUS.COMPLETED,
-                    );
-
                     // Note: Order status should be updated by order management system
                     // based on business logic, not directly tied to payment status
                 } else {
-                    console.log(
-                        'ℹ️  Payment already completed or not in pending status',
-                    );
-                    console.log('Current payment status:', payment.status);
-                    console.log('No status change needed - no log created');
                 }
             } else {
-                console.log('❌ MoMo transaction status check failed');
-                console.log('Result code:', response.resultCode);
-                console.log('Message:', response.message);
-                console.log('Payment status remains:', payment.status);
-
                 // No log created for failed checks unless status actually changes
             }
 
@@ -612,16 +569,6 @@ class MomoPaymentService {
                 },
                 timeout: 30000, // 30 seconds timeout as per documentation
             };
-            console.log('Sending request to MoMo:', {
-                endpoint: endpoint,
-                requestBody: requestBodyString,
-            });
-            console.log('--------------------REQUEST BODY----------------');
-            console.log(requestBodyString);
-            console.log('--------------------------------------------------');
-            console.log('--------------------REQUEST OPTIONS----------------');
-            console.log(JSON.stringify(options, null, 2));
-            console.log('--------------------------------------------------');
 
             const req = https.request(options, (res) => {
                 let data = '';
