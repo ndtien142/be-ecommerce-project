@@ -6,7 +6,6 @@ const { toCamel } = require('../../utils/common.utils');
 const MomoPaymentService = require('../payment/momo.service');
 const EmailService = require('../email/email.service');
 const CouponService = require('../promotion/coupon.service');
-const CartService = require('../cart/cart.service');
 const { getProductById } = require('../../repositories/product/product.repo');
 
 class OrderService {
@@ -40,7 +39,7 @@ class OrderService {
     // Helper method to update product stock and sold count
     static async updateProductStock(cartItems, transaction) {
         for (const item of cartItems) {
-            const product = await database.Product.findByPk(item.productId, {
+            const product = await database.Product.findByPk(item.product_id, {
                 transaction,
             });
 
@@ -61,6 +60,85 @@ class OrderService {
                 await product.save({ transaction });
             }
         }
+    }
+
+    // Helper method to process coupon discount
+    static async processCouponDiscount(userId, couponCode, orderData) {
+        if (!couponCode) {
+            return {
+                discountAmount: 0,
+                shippingDiscount: 0,
+                appliedCoupon: null,
+                orderCouponData: null,
+            };
+        }
+
+        // Validate coupon
+        const coupon = await CouponService.validateCoupon(
+            couponCode,
+            userId,
+            orderData,
+        );
+
+        // Calculate discount
+        const discount = CouponService.calculateDiscount(coupon, orderData);
+
+        // Prepare order coupon data
+        const orderCouponData = {
+            couponCode: coupon.code,
+            discountType: coupon.type,
+            discountValue: coupon.value,
+            discountAmount: discount.discountAmount,
+            orderSubtotal: orderData.subtotal,
+            shippingFee: orderData.shippingFee,
+            shippingDiscount: discount.shippingDiscount,
+            appliedProducts: orderData.items.map((item) => ({
+                productId: item.product_id,
+                quantity: item.quantity,
+                price: item.price,
+            })),
+            conditionsMet: {
+                minOrderAmount: coupon.minOrderAmount,
+                applicableProducts: coupon.applicableProducts,
+                applicableCategories: coupon.applicableCategories,
+            },
+        };
+
+        return {
+            discountAmount: discount.discountAmount,
+            shippingDiscount: discount.shippingDiscount,
+            appliedCoupon: coupon,
+            orderCouponData: orderCouponData,
+        };
+    }
+
+    // Helper method to calculate order totals
+    static calculateOrderTotals(
+        items_with_prices,
+        shipping_fee,
+        coupon_discount,
+    ) {
+        const subtotal = items_with_prices.reduce(
+            (sum, item) => sum + Number(item.total),
+            0,
+        );
+        const coupon_discount_amount = coupon_discount.discount_amount || 0;
+        const shipping_discount = coupon_discount.shipping_discount || 0;
+
+        const final_shipping_fee = Math.max(
+            0,
+            shipping_fee - shipping_discount,
+        );
+        const total_amount =
+            subtotal - coupon_discount_amount + final_shipping_fee;
+
+        return {
+            subtotal,
+            coupon_discount_amount,
+            shipping_discount,
+            final_shipping_fee,
+            total_amount,
+        };
     }
 
     static async createOrder({
@@ -279,85 +357,6 @@ class OrderService {
             }
             throw err;
         }
-    }
-
-    // Helper method to process coupon discount
-    static async processCouponDiscount(userId, couponCode, orderData) {
-        if (!couponCode) {
-            return {
-                discountAmount: 0,
-                shippingDiscount: 0,
-                appliedCoupon: null,
-                orderCouponData: null,
-            };
-        }
-
-        // Validate coupon
-        const coupon = await CouponService.validateCoupon(
-            couponCode,
-            userId,
-            orderData,
-        );
-
-        // Calculate discount
-        const discount = CouponService.calculateDiscount(coupon, orderData);
-
-        // Prepare order coupon data
-        const orderCouponData = {
-            couponCode: coupon.code,
-            discountType: coupon.type,
-            discountValue: coupon.value,
-            discountAmount: discount.discountAmount,
-            orderSubtotal: orderData.subtotal,
-            shippingFee: orderData.shippingFee,
-            shippingDiscount: discount.shippingDiscount,
-            appliedProducts: orderData.items.map((item) => ({
-                productId: item.product_id,
-                quantity: item.quantity,
-                price: item.price,
-            })),
-            conditionsMet: {
-                minOrderAmount: coupon.minOrderAmount,
-                applicableProducts: coupon.applicableProducts,
-                applicableCategories: coupon.applicableCategories,
-            },
-        };
-
-        return {
-            discountAmount: discount.discountAmount,
-            shippingDiscount: discount.shippingDiscount,
-            appliedCoupon: coupon,
-            orderCouponData: orderCouponData,
-        };
-    }
-
-    // Helper method to calculate order totals
-    static calculateOrderTotals(
-        items_with_prices,
-        shipping_fee,
-        coupon_discount,
-    ) {
-        const subtotal = items_with_prices.reduce(
-            (sum, item) => sum + Number(item.total),
-            0,
-        );
-        const coupon_discount_amount = coupon_discount.discount_amount || 0;
-        const shipping_discount = coupon_discount.shipping_discount || 0;
-
-        const final_shipping_fee = Math.max(
-            0,
-            shipping_fee - shipping_discount,
-        );
-        const total_amount =
-            subtotal - coupon_discount_amount + final_shipping_fee;
-
-        return {
-            subtotal,
-            coupon_discount_amount,
-            shipping_discount,
-            final_shipping_fee,
-            total_amount,
-        };
     }
 
     static async getOrderById(id) {
