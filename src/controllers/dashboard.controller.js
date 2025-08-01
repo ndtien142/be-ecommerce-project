@@ -3,6 +3,33 @@ const { SuccessResponse } = require('../core/success.response');
 const { BadRequestError } = require('../core/error.response');
 
 class DashboardController {
+    constructor() {
+        // Bind methods to preserve 'this' context
+        this.clearCache = this.clearCache.bind(this);
+        this.getWorkflowStatistics = this.getWorkflowStatistics.bind(this);
+        this.getDashboardOverview = this.getDashboardOverview.bind(this);
+        this.getTimeSeriesData = this.getTimeSeriesData.bind(this);
+        this.getRealtimeMetrics = this.getRealtimeMetrics.bind(this);
+        this.getRecentOrders = this.getRecentOrders.bind(this);
+        this.isValidDate = this.isValidDate.bind(this);
+    }
+
+    /**
+     * Clear cache
+     * DELETE /api/v1/dashboard/workflow/cache
+     */
+    async clearCache(req, res, next) {
+        try {
+            DashboardService.clearCache();
+
+            return new SuccessResponse({
+                message: 'Xóa cache thành công',
+            }).send(res);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     /**
      * Get workflow statistics
      * GET /api/v1/dashboard/workflow/statistics
@@ -16,22 +43,28 @@ class DashboardController {
                 timezone = 'Asia/Ho_Chi_Minh',
             } = req.query;
 
-            // Validate period
-            const validPeriods = ['today', '7days', 'month', 'custom'];
+            // Update: Accept more period types
+            const validPeriods = [
+                'today',
+                '7days',
+                'month',
+                'year',
+                'quarter',
+                'week',
+                'custom',
+            ];
             if (!validPeriods.includes(period)) {
                 throw new BadRequestError(
-                    'Giá trị period phải là: today, 7days, month, hoặc custom',
+                    'Giá trị period phải là: today, 7days, week, month, quarter, year, hoặc custom',
                 );
             }
 
-            // Validate custom period
             if (period === 'custom' && (!startDate || !endDate)) {
                 throw new BadRequestError(
                     'startDate và endDate bắt buộc khi period=custom',
                 );
             }
 
-            // Validate date format
             if (startDate && !this.isValidDate(startDate)) {
                 throw new BadRequestError(
                     'startDate phải có định dạng YYYY-MM-DD',
@@ -73,22 +106,27 @@ class DashboardController {
                 timezone = 'Asia/Ho_Chi_Minh',
             } = req.query;
 
-            // Validate period
-            const validPeriods = ['today', '7days', 'month', 'custom'];
+            const validPeriods = [
+                'today',
+                '7days',
+                'month',
+                'year',
+                'quarter',
+                'week',
+                'custom',
+            ];
             if (!validPeriods.includes(period)) {
                 throw new BadRequestError(
-                    'Giá trị period phải là: today, 7days, month, hoặc custom',
+                    'Giá trị period phải là: today, 7days, week, month, quarter, year, hoặc custom',
                 );
             }
 
-            // Validate custom period
             if (period === 'custom' && (!startDate || !endDate)) {
                 throw new BadRequestError(
                     'startDate và endDate bắt buộc khi period=custom',
                 );
             }
 
-            // Validate date format
             if (startDate && !this.isValidDate(startDate)) {
                 throw new BadRequestError(
                     'startDate phải có định dạng YYYY-MM-DD',
@@ -118,7 +156,7 @@ class DashboardController {
     }
 
     /**
-     * Get time series data
+     * Get time series data for charting
      * GET /api/v1/dashboard/workflow/timeseries
      */
     async getTimeSeriesData(req, res, next) {
@@ -131,28 +169,43 @@ class DashboardController {
                 metrics = 'orders,revenue,actions',
             } = req.query;
 
-            // Validate period
-            const validPeriods = ['today', '7days', 'month', 'custom'];
+            const validPeriods = [
+                'today',
+                '7days',
+                'month',
+                'year',
+                'quarter',
+                'week',
+                'custom',
+            ];
             if (!validPeriods.includes(period)) {
                 throw new BadRequestError(
-                    'Giá trị period phải là: today, 7days, month, hoặc custom',
+                    'Giá trị period phải là: today, 7days, week, month, quarter, year, hoặc custom',
                 );
             }
 
-            // Validate granularity
-            const validGranularities = ['hour', 'day', 'week'];
+            // Accept more granularities
+            const validGranularities = [
+                'hour',
+                'day',
+                'week',
+                'month',
+                'quarter',
+                'year',
+            ];
             if (!validGranularities.includes(granularity)) {
                 throw new BadRequestError(
-                    'Giá trị granularity phải là: hour, day, week',
+                    'Giá trị granularity phải là: hour, day, week, month, quarter, year',
                 );
             }
 
-            // Validate metrics
             const validMetrics = [
                 'orders',
                 'revenue',
                 'actions',
                 'completionRate',
+                'momoSuccess',
+                'cashSuccess',
             ];
             const metricsArray = metrics.split(',').map((m) => m.trim());
             const invalidMetrics = metricsArray.filter(
@@ -164,14 +217,12 @@ class DashboardController {
                 );
             }
 
-            // Validate custom period
             if (period === 'custom' && (!startDate || !endDate)) {
                 throw new BadRequestError(
                     'startDate và endDate bắt buộc khi period=custom',
                 );
             }
 
-            // Validate date format
             if (startDate && !this.isValidDate(startDate)) {
                 throw new BadRequestError(
                     'startDate phải có định dạng YYYY-MM-DD',
@@ -193,7 +244,7 @@ class DashboardController {
             );
 
             return new SuccessResponse({
-                message: 'Lấy dữ liệu thời gian thành công',
+                message: 'Lấy dữ liệu chuỗi thời gian thành công',
                 metadata: result,
             }).send(res);
         } catch (error) {
@@ -219,15 +270,69 @@ class DashboardController {
     }
 
     /**
-     * Clear dashboard cache
-     * DELETE /api/v1/dashboard/workflow/cache
+     * Get recent orders with pagination
+     * GET /api/v1/dashboard/recent-orders
      */
-    async clearCache(req, res, next) {
+    async getRecentOrders(req, res, next) {
         try {
-            DashboardService.clearCache();
+            const {
+                page = 1,
+                limit = 10,
+                status,
+                userId,
+                startDate,
+                endDate,
+            } = req.query;
+
+            const pageNum = parseInt(page);
+            const limitNum = parseInt(limit);
+
+            if (pageNum < 1) {
+                throw new BadRequestError('Page phải lớn hơn 0');
+            }
+
+            if (limitNum < 1 || limitNum > 100) {
+                throw new BadRequestError('Limit phải từ 1 đến 100');
+            }
+
+            if (startDate && !this.isValidDate(startDate)) {
+                throw new BadRequestError(
+                    'startDate phải có định dạng YYYY-MM-DD',
+                );
+            }
+
+            if (endDate && !this.isValidDate(endDate)) {
+                throw new BadRequestError(
+                    'endDate phải có định dạng YYYY-MM-DD',
+                );
+            }
+
+            const filters = {
+                status,
+                userId: userId ? parseInt(userId) : undefined,
+                startDate,
+                endDate,
+            };
+
+            const result = await DashboardService.getRecentOrders(
+                pageNum,
+                limitNum,
+                filters,
+            );
 
             return new SuccessResponse({
-                message: 'Xóa cache thành công',
+                message: 'Lấy danh sách đơn hàng mới nhất thành công',
+                metadata: {
+                    orders: result.orders,
+                    pagination: {
+                        page: pageNum,
+                        limit: limitNum,
+                        total: result.total,
+                        totalPages: Math.ceil(result.total / limitNum),
+                        hasNext: pageNum < Math.ceil(result.total / limitNum),
+                        hasPrev: pageNum > 1,
+                    },
+                },
             }).send(res);
         } catch (error) {
             next(error);
@@ -242,10 +347,10 @@ class DashboardController {
         if (!regex.test(dateString)) {
             return false;
         }
-
         const date = new Date(dateString);
         return date instanceof Date && !isNaN(date);
     }
 }
 
-module.exports = new DashboardController();
+const dashboardController = new DashboardController();
+module.exports = dashboardController;
