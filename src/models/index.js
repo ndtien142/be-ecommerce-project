@@ -47,29 +47,18 @@ const OrderLog = require('./order/orderLog')(sequelize);
 const Cart = require('./cart/cart')(sequelize);
 const CartLineItem = require('./cart/cartLineItem')(sequelize);
 
-// Import import receipt models
-const ImportReceipt = require('./import-receipt/importReceipt')(sequelize);
-const ImportReceiptDetail = require('./import-receipt/importReceiptDetail')(
-    sequelize,
-);
-const Supplier = require('./import-receipt/supplier')(sequelize);
-
 // Import address model
 const UserAddress = require('./user/address')(sequelize);
 
 // Import payment models
 const Payment = require('./payment/payment')(sequelize);
 const PaymentMethod = require('./payment/paymentMethod')(sequelize);
-const CustomerPaymentOption = require('./payment/customerPaymentOptions')(
-    sequelize,
-);
 
 // Import shipping models
 const shippingMethod = require('./order/shippingMethods')(sequelize);
 
 // Import promotion models
 const Coupon = require('./promotions/coupon')(sequelize);
-const UserCoupon = require('./promotions/userCoupon')(sequelize);
 const OrderCoupon = require('./promotions/orderCoupon')(sequelize);
 
 // Assign models to the database object
@@ -97,17 +86,11 @@ database.OrderLog = OrderLog;
 database.Cart = Cart;
 database.CartLineItem = CartLineItem;
 
-// Import receipt models
-database.ImportReceipt = ImportReceipt;
-database.ImportReceiptDetail = ImportReceiptDetail;
-database.Supplier = Supplier;
-
 // Address model
 database.UserAddress = UserAddress;
 
 // Payment models
 database.Payment = Payment;
-database.CustomerPaymentOption = CustomerPaymentOption;
 database.PaymentMethod = PaymentMethod;
 
 // Shipping models
@@ -115,7 +98,6 @@ database.ShippingMethod = shippingMethod;
 
 // Promotion models
 database.Coupon = Coupon;
-database.UserCoupon = UserCoupon;
 database.OrderCoupon = OrderCoupon;
 // database.Promotion = Promotion;
 
@@ -221,26 +203,6 @@ database.Order.hasMany(database.Payment, {
     as: 'payments',
 });
 
-// PaymentMethod & CustomerPaymentOption
-database.PaymentMethod.hasMany(database.CustomerPaymentOption, {
-    foreignKey: 'payment_method_id',
-    as: 'customerPaymentOptions',
-});
-database.CustomerPaymentOption.belongsTo(database.PaymentMethod, {
-    foreignKey: 'payment_method_id',
-    as: 'paymentMethod',
-});
-
-// CustomerPaymentOption & User
-database.CustomerPaymentOption.belongsTo(database.User, {
-    foreignKey: 'user_id',
-    as: 'user',
-});
-database.User.hasMany(database.CustomerPaymentOption, {
-    foreignKey: 'user_id',
-    as: 'customerPaymentOptions',
-});
-
 // Order & ShippingMethod
 database.Order.belongsTo(database.ShippingMethod, {
     foreignKey: 'shipping_method_id',
@@ -340,60 +302,6 @@ database.Product.belongsToMany(database.Cart, {
     as: 'carts',
 });
 
-// ImportReceipt & User (N-1)
-database.ImportReceipt.belongsTo(database.User, {
-    foreignKey: 'user_id',
-    as: 'user',
-});
-database.User.hasMany(database.ImportReceipt, {
-    foreignKey: 'user_id',
-    as: 'importReceipts',
-});
-
-// ImportReceipt & Supplier (N-1)
-database.ImportReceipt.belongsTo(database.Supplier, {
-    foreignKey: 'supplier_id',
-    as: 'supplier',
-});
-database.Supplier.hasMany(database.ImportReceipt, {
-    foreignKey: 'supplier_id',
-    as: 'importReceipts',
-});
-
-// ImportReceipt & ImportReceiptDetail (1-N)
-database.ImportReceipt.hasMany(database.ImportReceiptDetail, {
-    foreignKey: 'import_receipt_id',
-    as: 'details',
-});
-database.ImportReceiptDetail.belongsTo(database.ImportReceipt, {
-    foreignKey: 'import_receipt_id',
-    as: 'importReceipt',
-});
-
-// ImportReceipt & Product (Many-to-Many through ImportReceiptDetail)
-database.ImportReceipt.belongsToMany(database.Product, {
-    through: database.ImportReceiptDetail,
-    foreignKey: 'import_receipt_id',
-    otherKey: 'product_id',
-    as: 'products',
-});
-database.Product.belongsToMany(database.ImportReceipt, {
-    through: database.ImportReceiptDetail,
-    foreignKey: 'product_id',
-    otherKey: 'import_receipt_id',
-    as: 'importReceipts',
-});
-
-// ImportReceiptDetail & Product (N-1)
-database.ImportReceiptDetail.belongsTo(database.Product, {
-    foreignKey: 'product_id',
-    as: 'product',
-});
-database.Product.hasMany(database.ImportReceiptDetail, {
-    foreignKey: 'product_id',
-    as: 'importReceiptDetails',
-});
-
 // User & Address (1-N)
 database.User.hasMany(database.UserAddress, {
     foreignKey: 'user_id',
@@ -416,26 +324,6 @@ database.UserAddress.hasMany(database.Order, {
 
 // ===== PROMOTION ASSOCIATIONS =====
 
-// User & UserCoupon (1-N)
-database.User.hasMany(database.UserCoupon, {
-    foreignKey: 'user_id',
-    as: 'user_coupons',
-});
-database.UserCoupon.belongsTo(database.User, {
-    foreignKey: 'user_id',
-    as: 'user',
-});
-
-// Coupon & UserCoupon (1-N)
-database.Coupon.hasMany(database.UserCoupon, {
-    foreignKey: 'coupon_id',
-    as: 'user_coupons',
-});
-database.UserCoupon.belongsTo(database.Coupon, {
-    foreignKey: 'coupon_id',
-    as: 'coupon',
-});
-
 // Order & OrderCoupon (1-N)
 database.Order.hasMany(database.OrderCoupon, {
     foreignKey: 'order_id',
@@ -454,16 +342,6 @@ database.Coupon.hasMany(database.OrderCoupon, {
 database.OrderCoupon.belongsTo(database.Coupon, {
     foreignKey: 'coupon_id',
     as: 'coupon',
-});
-
-// UserCoupon & OrderCoupon (1-N)
-database.UserCoupon.hasMany(database.OrderCoupon, {
-    foreignKey: 'user_coupon_id',
-    as: 'order_coupons',
-});
-database.OrderCoupon.belongsTo(database.UserCoupon, {
-    foreignKey: 'user_coupon_id',
-    as: 'user_coupon',
 });
 
 // Sync the models with the database

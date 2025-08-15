@@ -78,11 +78,6 @@ class OrderRepo {
         return cartInstance.save({ transaction });
     }
 
-    // UserCoupon
-    static async findUserCoupon(where, options = {}) {
-        return database.UserCoupon.findOne({ where, ...options });
-    }
-
     // Transaction
     static async getSequelizeTransaction() {
         return database.sequelize.transaction();

@@ -193,24 +193,6 @@ const deleteAccountWithRelations = async (userId) => {
                     transaction,
                 });
 
-                // 5. Delete customer payment options (references User)
-                await db.CustomerPaymentOption.destroy({
-                    where: { user_id: userId },
-                    transaction,
-                });
-
-                // 6. Delete import receipts (references User) - only if they exist
-                const importReceiptCount = await db.ImportReceipt.count({
-                    where: { user_id: userId },
-                    transaction,
-                });
-                if (importReceiptCount > 0) {
-                    await db.ImportReceipt.destroy({
-                        where: { user_id: userId },
-                        transaction,
-                    });
-                }
-
                 // 7. Finally delete the user
                 await db.User.destroy({
                     where: { id: userId },
