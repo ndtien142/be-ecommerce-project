@@ -2,7 +2,6 @@
 
 const bcrypt = require('bcrypt');
 const database = require('../../models');
-const { generateuserId } = require('../../utils');
 const { BadRequestError } = require('../../core/error.response');
 const { toCamel } = require('../../utils/common.utils');
 
@@ -10,6 +9,7 @@ class UserService {
     static async createUser({
         username,
         password,
+        email,
         avatarUrl,
         roleId,
         firstName,
@@ -21,13 +21,21 @@ class UserService {
 
         try {
             const role = await database.Role.findByPk(roleId);
+            if (!role) {
+                throw new BadRequestError('Role không tồn tại!');
+            }
 
             const existingAccount = await database.User.findOne({
-                where: { username },
+                where: {
+                    [database.Sequelize.Op.or]: [
+                        { user_login: username },
+                        { user_email: email },
+                    ],
+                },
             });
             if (existingAccount) {
                 throw new BadRequestError(
-                    'Lỗi: Tên đăng nhập đã được đăng ký!',
+                    'Lỗi: Tên đăng nhập hoặc email đã được đăng ký!',
                 );
             }
             // Step 2: hashing password
@@ -35,19 +43,19 @@ class UserService {
 
             const newAccount = await database.User.create(
                 {
-                    user_code: generateuserId(),
-                    username,
-                    password: passwordHash,
-                    fk_role_id: role.id,
-                    is_active: true,
-                    is_block: false,
+                    user_login: username,
+                    user_pass: passwordHash,
+                    user_email: email,
+                    role_id: role.id,
+                    user_registered: new Date(),
+                    user_status: 'normal',
                 },
                 { transaction },
             );
 
             const profile = await database.Profile.create(
                 {
-                    fk_user_code: newAccount.user_code,
+                    user_id: newAccount.id,
                     first_name: firstName,
                     last_name: lastName,
                     avatar_url: avatarUrl,
@@ -60,21 +68,19 @@ class UserService {
             await transaction.commit();
 
             return toCamel({
-                userId: account.user_code,
-                username: account.username,
-                roleId: account.fk_role_id,
-                isActive: account.is_active,
-                isBlock: account.is_block,
-                profiles: [
-                    {
-                        id: profile.id,
-                        firstName: profile.first_name,
-                        lastName: profile.last_name,
-                        avatarUrl: profile.avatar_url,
-                        phoneNumber: profile.phone_number,
-                        address: profile.address,
-                    },
-                ],
+                userId: newAccount.id,
+                username: newAccount.user_login,
+                email: newAccount.user_email,
+                roleId: newAccount.role_id,
+                userStatus: newAccount.user_status,
+                profile: {
+                    id: profile.id,
+                    firstName: profile.first_name,
+                    lastName: profile.last_name,
+                    avatarUrl: profile.avatar_url,
+                    phoneNumber: profile.phone_number,
+                    address: profile.address,
+                },
             });
         } catch (error) {
             await transaction.rollback();
@@ -85,10 +91,10 @@ class UserService {
     static async updateUser({
         userId,
         username,
+        email,
         avatarUrl,
         roleId,
-        isActive,
-        isBlock,
+        userStatus,
         firstName,
         lastName,
         phoneNumber,
@@ -101,29 +107,43 @@ class UserService {
                 throw new BadRequestError('Không tìm thấy người dùng');
             }
 
-            account.username = username;
-            account.fk_role_id = roleId;
-            account.is_active = isActive;
-            account.is_block = isBlock;
-            account.avatar_url = avatarUrl;
+            if (username) account.user_login = username;
+            if (email) account.user_email = email;
+            if (roleId) account.role_id = roleId;
+            if (userStatus) account.user_status = userStatus;
             await account.save({ transaction });
 
             const profile = await database.Profile.findOne({
-                where: { fk_user_code: userId },
+                where: { user_id: userId },
             });
             if (!profile) {
                 throw new Error('Không tìm thấy hồ sơ');
             }
 
-            profile.first_name = firstName;
-            profile.last_name = lastName;
-            profile.phone_number = phoneNumber;
-            profile.address = address;
+            if (firstName) profile.first_name = firstName;
+            if (lastName) profile.last_name = lastName;
+            if (phoneNumber) profile.phone_number = phoneNumber;
+            if (address) profile.address = address;
+            if (avatarUrl) profile.avatar_url = avatarUrl;
             await profile.save({ transaction });
 
             await transaction.commit();
 
-            return toCamel({ account, profile });
+            return toCamel({
+                userId: account.id,
+                username: account.user_login,
+                email: account.user_email,
+                roleId: account.role_id,
+                userStatus: account.user_status,
+                profile: {
+                    id: profile.id,
+                    firstName: profile.first_name,
+                    lastName: profile.last_name,
+                    phoneNumber: profile.phone_number,
+                    address: profile.address,
+                    avatarUrl: profile.avatar_url,
+                },
+            });
         } catch (error) {
             await transaction.rollback();
             throw error;
@@ -136,11 +156,11 @@ class UserService {
             throw new Error('Không tìm thấy người dùng');
         }
 
-        account.is_delete = true;
+        account.user_status = 'deleted';
         await account.save();
         return toCamel({
             userId,
-            isDeleted: account.is_delete,
+            userStatus: account.user_status,
         });
     }
 
@@ -150,11 +170,12 @@ class UserService {
             throw new Error('Không tìm thấy người dùng');
         }
 
-        account.is_block = isBlock;
+        account.user_status = isBlock ? 'blocked' : 'normal';
         await account.save();
         return toCamel({
             userId,
-            isBlock: account.is_block,
+            userStatus: account.user_status,
+            isBlocked: isBlock,
         });
     }
 
@@ -177,26 +198,27 @@ class UserService {
         }
 
         return toCamel({
-            userId: account.user_code,
-            username: account.username,
-            isActive: account.is_active,
-            isBlock: account.is_block,
+            userId: account.id,
+            username: account.user_login,
+            email: account.user_email,
+            userStatus: account.user_status,
+            emailVerified: account.email_verified,
+            userRegistered: account.user_registered,
             role: {
                 id: account.role.id,
                 name: account.role.role_name,
             },
-            profiles:
-                account.profile.map((item) => {
-                    return {
-                        id: item.id,
-                        firstName: item.first_name,
-                        lastName: item.last_name,
-                        phoneNumber: item.phone_number,
-                        address: item.address,
-                        create_time: item.create_time,
-                        avatarUrl: item.avatar_url,
-                    };
-                }) || [],
+            profile: account.profile
+                ? {
+                      id: account.profile.id,
+                      firstName: account.profile.first_name,
+                      lastName: account.profile.last_name,
+                      phoneNumber: account.profile.phone_number,
+                      address: account.profile.address,
+                      avatarUrl: account.profile.avatar_url,
+                      createTime: account.profile.create_time,
+                  }
+                : null,
         });
     }
 
@@ -243,7 +265,7 @@ class UserService {
                     as: 'role',
                 },
             ],
-            order: [['create_time', 'DESC']],
+            order: [['user_registered', 'DESC']],
         });
 
         return toCamel({
@@ -252,13 +274,12 @@ class UserService {
                     userId: account.id,
                     username: account.user_login,
                     email: account.user_email,
-                    isActive: account.is_active,
-                    isBlock: account.is_block,
-                    isVerified: account.email_verified,
+                    userStatus: account.user_status,
+                    emailVerified: account.email_verified,
+                    userRegistered: account.user_registered,
                     role: {
                         id: account.role.id,
-                        name: account.role.name,
-                        description: account.role.description,
+                        name: account.role.role_name,
                     },
                     profile: account?.profile
                         ? {
@@ -279,6 +300,24 @@ class UserService {
                 totalPages: Math.ceil(count / parseInt(limit)),
                 totalItems: count,
             },
+        });
+    }
+
+    static async createAdmin(userData) {
+        // Tìm role admin
+        const adminRole = await database.Role.findOne({
+            where: { role_name: 'admin' },
+        });
+
+        if (!adminRole) {
+            throw new BadRequestError(
+                'Role admin không tồn tại trong hệ thống!',
+            );
+        }
+
+        return this.createUser({
+            ...userData,
+            roleId: adminRole.id,
         });
     }
 }
