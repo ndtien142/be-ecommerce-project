@@ -7,9 +7,7 @@ module.exports = function checkRole([...allowedRoles]) {
                 .json({ message: 'Unauthorized: No user or role found' });
         }
         if (!allowedRoles.includes(String(req.user.role.name))) {
-            return res
-                .status(403)
-                .json({ message: 'Forbidden: Insufficient role' });
+            return res.status(403).json({ message: 'Lỗi quyền truy cập' });
         }
         next();
     };

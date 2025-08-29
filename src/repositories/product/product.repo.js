@@ -97,6 +97,7 @@ const createProductRepo = async (payload, transaction) => {
     return await database.Product.create(
         {
             ...payload,
+            is_sale: payload.isSale || false,
             price_sale: payload.priceSale || 0,
             min_stock: payload.minStock || 0,
             weight: payload.weight || 0,
@@ -138,6 +139,8 @@ const updateProductRepo = async (id, updateData) => {
     if (updateData.productType !== undefined)
         mappedData.product_type = updateData.productType;
     if (updateData.flag !== undefined) mappedData.flag = updateData.flag;
+
+    if (updateData.isSale !== undefined) mappedData.is_sale = updateData.isSale;
 
     const [affectedRows] = await database.Product.update(mappedData, {
         where: { id },

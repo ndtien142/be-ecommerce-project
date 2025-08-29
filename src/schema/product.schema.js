@@ -36,6 +36,7 @@ const createProductSchema = Joi.object({
     brandId: Joi.number().integer().allow(null).optional(),
     price: Joi.number().positive().required(),
     priceSale: Joi.number().allow(null).optional(),
+    isSale: Joi.boolean().default(false),
     stock: Joi.number().integer().min(0).optional(),
     minStock: Joi.number().integer().min(0).optional(),
     weight: Joi.number().optional(),
