@@ -14,6 +14,7 @@ const { getRoleByName } = require('../../models/repo/role.repo');
 const {
     createAccount,
     getAccountByUserLogin,
+    getAccountByEmail,
 } = require('../../models/repo/user.repo');
 const {
     createKeyToken,
@@ -275,6 +276,12 @@ class AccessService {
         if (existingAccount) {
             throw new BadRequestError('Lỗi: Tên đăng nhập đã được đăng ký!');
         }
+
+        const foundAccountEmail = await getAccountByEmail(email);
+
+        if (foundAccountEmail) {
+            throw new BadRequestError('Lỗi: Email đã được đăng ký!');
+        }
         // Step 2: hashing password
         const passwordHash = await bcrypt.hash(password, 10);
 
@@ -527,7 +534,7 @@ class AccessService {
         await emailService.sendWelcomeEmail(user.user_email, user.user_login);
 
         return {
-            message: 'Email verified successfully',
+            message: 'Xác thực email thành công',
             user: {
                 userId: user.id,
                 username: user.user_login,
