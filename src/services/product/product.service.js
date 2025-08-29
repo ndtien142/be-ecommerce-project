@@ -19,6 +19,7 @@ const {
 const { toCamel } = require('../../utils/common.utils');
 
 class ProductService {
+    // Tạo sản phẩm - Admin
     static createProduct = async (payload) => {
         let { brandId, brand } = payload;
 
@@ -92,6 +93,7 @@ class ProductService {
         }
     };
 
+    // Lấy sản phẩm theo ID
     static async getProductById(id) {
         if (!id || isNaN(Number(id))) {
             throw new BadRequestError(
@@ -105,6 +107,8 @@ class ProductService {
         return toCamel(product.toJSON());
     }
 
+    // Lấy tất cả sản phẩm
+    // Phân trang theo page và limit
     static async getAllProducts(rawFilters) {
         const { error, value: filters } =
             getAllProductsFilterSchema.validate(rawFilters);
@@ -163,12 +167,15 @@ class ProductService {
         return response;
     }
 
+    // Cập nhật sản phẩm
     static async updateProduct(id, payload) {
         const { error, value } = updateProductSchema.validate(payload);
         if (error) throw new BadRequestError(error.details[0].message);
         return await updateProductRepo(id, value);
     }
 
+    // Xóa sản phẩm
+    // Chỉ xóa sản phẩm chưa có đơn đặt hàng
     static async deleteProduct(id) {
         // Kiểm tra tồn tại sản phẩm
         const product = await getProductById(id);
@@ -205,6 +212,7 @@ class ProductService {
         }
     }
 
+    // Lấy sản phẩm theo slug
     static async getProductBySlug(slug) {
         const product = await getProductBySlugRepo(slug);
 

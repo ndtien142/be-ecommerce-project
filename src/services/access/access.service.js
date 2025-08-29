@@ -361,7 +361,7 @@ class AccessService {
             return {
                 code: 201,
                 message:
-                    'Customer account created successfully. Please check your email for a 6-digit verification code.',
+                    'Tạo tài khoản thành công. Vui lòng kiểm tra email để xác thực tài khoản!',
                 user: {
                     userId: newAccount.id,
                     username: newAccount.user_login,
