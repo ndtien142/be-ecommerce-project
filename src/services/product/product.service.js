@@ -171,7 +171,15 @@ class ProductService {
     static async updateProduct(id, payload) {
         const { error, value } = updateProductSchema.validate(payload);
         if (error) throw new BadRequestError(error.details[0].message);
-        return await updateProductRepo(id, value);
+        return await updateProductRepo(id, {
+            ...value,
+            inventoryType:
+                value.stock === 0
+                    ? 'out_of_stock'
+                    : value.stock <= value.minStock
+                      ? 'low_stock'
+                      : 'in_stock',
+        });
     }
 
     // Xóa sản phẩm
