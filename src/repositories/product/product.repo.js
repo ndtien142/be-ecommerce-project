@@ -97,6 +97,7 @@ const createProductRepo = async (payload, transaction) => {
     return await database.Product.create(
         {
             ...payload,
+            price_sale: payload.priceSale || 0,
             min_stock: payload.minStock || 0,
             weight: payload.weight || 0,
             width: payload.width || 0,
